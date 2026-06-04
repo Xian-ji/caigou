@@ -1,0 +1,2293 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>古建明信片生成器 · 彩构寻踪</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600;900&family=Zhi+Mang+Xing&family=DM+Mono:wght@300;400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ========== 宋韵古典基础变量与样式 ========== */
+      :root {
+        --paper: #f5f0e8; /* Aged parchment */
+        --ink: #2c2416; /* Ink black */
+        --seal: #8b2020; /* Vermillion seal red */
+        --celadon: #a8b89a; /* Muted celadon */
+        --gold: #c4a55a; /* Dusty gold */
+
+        --bg: #ebe3d5; /* 外围桌面背景 */
+        --border: rgba(44, 36, 22, 0.25);
+        --border-double: 3px double var(--border);
+
+        --serif: "Noto Serif SC", serif;
+        --brush: "Zhi Mang Xing", cursive;
+        --mono: "DM Mono", monospace;
+
+        --card-w: 600px;
+        --card-h: 400px;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: var(--serif);
+        background: var(--bg);
+        color: var(--ink);
+        min-height: 100vh;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      }
+
+      /* 隐藏的 SVG 滤镜用于水墨毛糙边缘 */
+      .svg-filters {
+        position: absolute;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+      }
+
+      /* ========== 整体布局 ========== */
+      .app {
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+      }
+      .sidebar {
+        width: 320px;
+        flex-shrink: 0;
+        border-right: 1px solid rgba(0, 0, 0, 0.1);
+        background: var(--paper);
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        height: 100%;
+        position: relative;
+        z-index: 10;
+        box-shadow: 4px 0 24px rgba(44, 36, 22, 0.08);
+      }
+      .sidebar::-webkit-scrollbar {
+        width: 4px;
+      }
+      .sidebar::-webkit-scrollbar-thumb {
+        background: var(--gold);
+      }
+      .preview-area {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* ========== 侧边栏组件 ========== */
+      .brand {
+        padding: 36px 20px 24px;
+        text-align: center;
+        border-bottom: var(--border-double);
+      }
+      .brand-logo {
+        max-width: 210px;
+        width: 85%;
+        height: auto;
+        margin: 0 auto 6px;
+        display: block;
+        mix-blend-mode: multiply;
+      }
+      .brand-title {
+        font-family: var(--brush);
+        font-size: 38px;
+        letter-spacing: 6px;
+        color: var(--ink);
+        display: block;
+        text-shadow: 0 1px 2px rgba(44, 36, 22, 0.1);
+      }
+      .brand-sub {
+        font-size: 11px;
+        color: var(--gold);
+        letter-spacing: 4px;
+        margin-top: 8px;
+        display: block;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .sb-section {
+        padding: 20px;
+        border-bottom: 1px solid rgba(44, 36, 22, 0.1);
+        animation: slideIn 0.4s ease forwards;
+      }
+      .sb-label {
+        font-size: 11px;
+        color: var(--ink);
+        letter-spacing: 3px;
+        margin-bottom: 12px;
+        display: block;
+        font-weight: 600;
+      }
+      .sb-label::before {
+        content: "·";
+        margin-right: 6px;
+        color: var(--seal);
+        font-weight: 900;
+      }
+
+      .drop-zone {
+        border: 1px solid var(--ink);
+        padding: 32px 14px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        background: transparent;
+        position: relative;
+      }
+      .drop-zone::after {
+        content: "";
+        position: absolute;
+        inset: 3px;
+        border: 1px dashed rgba(44, 36, 22, 0.3);
+        pointer-events: none;
+      }
+      .drop-zone:hover,
+      .drop-zone.over {
+        background: rgba(196, 165, 90, 0.1);
+        border-color: var(--seal);
+      }
+      .drop-zone:hover .dz-icon {
+        color: var(--seal);
+        transform: scale(1.05);
+      }
+      .dz-icon {
+        font-family: var(--brush);
+        font-size: 46px;
+        color: var(--ink);
+        display: block;
+        margin-bottom: 8px;
+        transition: all 0.3s;
+      }
+      .dz-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+        letter-spacing: 2px;
+        margin-bottom: 4px;
+      }
+      .dz-sub {
+        font-size: 10px;
+        color: rgba(44, 36, 22, 0.6);
+        font-family: var(--mono);
+      }
+      #fileInput {
+        display: none;
+      }
+
+      .loading-row {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--ink);
+        padding: 16px 0 4px;
+        letter-spacing: 2px;
+      }
+      .ld {
+        width: 6px;
+        height: 6px;
+        background: var(--seal);
+        border-radius: 50%;
+        animation: ldpulse 1.2s ease-in-out infinite;
+      }
+      .ld:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      .ld:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+      @keyframes ldpulse {
+        0%,
+        80%,
+        100% {
+          transform: scale(0.6);
+          opacity: 0.3;
+        }
+        40% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      .form-group {
+        margin-bottom: 18px;
+      }
+      .form-input,
+      .form-select {
+        width: 100%;
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid var(--border);
+        color: var(--ink);
+        font-family: var(--serif);
+        font-size: 13px;
+        padding: 6px 2px;
+        outline: none;
+        transition: border-color 0.2s;
+        border-radius: 0;
+      }
+      .form-input:focus,
+      .form-select:focus {
+        border-bottom-color: var(--seal);
+      }
+      .form-select {
+        cursor: pointer;
+        appearance: none;
+      }
+      .form-input::placeholder {
+        color: rgba(44, 36, 22, 0.4);
+        font-size: 12px;
+      }
+      textarea.form-input {
+        resize: vertical;
+        min-height: 24px;
+        line-height: 1.6;
+        padding-bottom: 8px;
+      }
+
+      .chips-grid {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 4px;
+        margin-top: 8px;
+      }
+      .chip {
+        height: 28px;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s;
+        filter: url(#rough-edge);
+      }
+      .chip:hover {
+        transform: scale(1.15) translateY(-2px);
+        z-index: 2;
+      }
+      .chip-tooltip {
+        opacity: 0;
+        visibility: hidden;
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%) translateY(4px);
+        background: var(--ink);
+        color: var(--paper);
+        font-family: var(--mono);
+        font-size: 10px;
+        padding: 4px 6px;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 20;
+        border-radius: 0;
+        transition: all 0.2s;
+      }
+      .chip:hover .chip-tooltip {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      .act-btn {
+        width: 100%;
+        padding: 12px;
+        background: transparent;
+        border: 1px solid var(--ink);
+        color: var(--ink);
+        font-family: var(--serif);
+        font-size: 13px;
+        letter-spacing: 2px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 10px;
+      }
+      .act-btn:hover:not(:disabled) {
+        border-color: var(--seal);
+        color: var(--seal);
+        background: rgba(139, 32, 32, 0.03);
+      }
+      .act-btn.primary {
+        background: var(--ink);
+        color: var(--paper);
+        border: none;
+        box-shadow:
+          inset 0 0 0 1px var(--ink),
+          inset 0 0 0 3px var(--paper);
+      }
+      .act-btn.primary:hover {
+        background: var(--seal);
+        box-shadow:
+          inset 0 0 0 1px var(--seal),
+          inset 0 0 0 3px var(--paper);
+        color: var(--paper);
+      }
+      .act-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .sb-foot {
+        padding: 24px 20px;
+        font-size: 11px;
+        color: rgba(44, 36, 22, 0.6);
+        letter-spacing: 1px;
+        line-height: 2;
+        margin-top: auto;
+        border-top: var(--border-double);
+        font-family: var(--serif);
+      }
+
+      /* ========== 明信片场景 (复古滤镜 & 线装质感) ========== */
+      .card-scale-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+      }
+      .card-scene {
+        width: var(--card-w);
+        height: var(--card-h);
+        perspective: 1800px;
+        cursor: pointer;
+        filter: sepia(12%) contrast(96%)
+          drop-shadow(0 30px 50px rgba(44, 36, 22, 0.25))
+          drop-shadow(0 8px 16px rgba(44, 36, 22, 0.15));
+      }
+      .card-tilt {
+        width: 100%;
+        height: 100%;
+        transform-style: preserve-3d;
+        transition: transform 0.1s ease-out;
+      }
+      .card-inner {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        transform-style: preserve-3d;
+        transition: transform 0.8s cubic-bezier(0.5, 0, 0.15, 1);
+      }
+      .card-inner.flipped {
+        transform: rotateY(180deg);
+      }
+      .face {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        backface-visibility: hidden;
+        overflow: hidden;
+        background-color: var(--paper);
+      }
+      /* 宣纸纹理混合 */
+      .face::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        mix-blend-mode: multiply;
+        opacity: 0.5;
+        z-index: 50;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.15'/%3E%3C/svg%3E");
+      }
+      .card-back-face {
+        transform: rotateY(180deg);
+      }
+
+      /* 光影效果 */
+      .card-glare {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        mix-blend-mode: soft-light;
+        z-index: 40;
+        opacity: 0;
+        transition: opacity 0.5s;
+      }
+
+      /* ─── 正面 ─── */
+      .face-front {
+        background: var(--ink);
+      }
+      .photo-bg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: none;
+      }
+      .photo-vignette {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 1;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        mask-image: radial-gradient(
+          circle at center,
+          transparent 40%,
+          black 95%
+        );
+        -webkit-mask-image: radial-gradient(
+          circle at center,
+          transparent 40%,
+          black 95%
+        );
+        background: radial-gradient(
+          circle at center,
+          transparent 40%,
+          rgba(44, 36, 22, 0.2) 100%
+        );
+      }
+
+      .front-empty {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background: var(--ink);
+        z-index: 2;
+      }
+      .fe-icon {
+        font-family: var(--brush);
+        font-size: 72px;
+        color: rgba(245, 240, 232, 0.08);
+        text-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+      }
+      .fe-text {
+        font-size: 14px;
+        color: rgba(245, 240, 232, 0.3);
+        letter-spacing: 8px;
+      }
+
+      /* 朱文印 */
+      .front-seal {
+        position: absolute;
+        top: 24px;
+        right: 24px;
+        width: 52px;
+        height: 52px;
+        border: 2px solid var(--seal);
+        background: transparent;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        z-index: 5;
+        transform: rotate(6deg);
+        filter: url(#rough-edge);
+        mix-blend-mode: multiply;
+        background: rgba(139, 32, 32, 0.05); /* Very faint red tint */
+      }
+      .seal-inner {
+        border: 1px solid var(--seal);
+        width: 44px;
+        height: 44px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      .seal-zh {
+        font-family: var(--brush);
+        font-size: 18px;
+        color: var(--seal);
+        line-height: 1;
+        margin-left: 2px;
+      }
+      .seal-en {
+        font-family: var(--mono);
+        font-size: 7px;
+        color: var(--seal);
+        letter-spacing: 1px;
+      }
+
+      /* 文武线文本框 */
+      .front-info-block {
+        position: absolute;
+        bottom: 80px;
+        left: 30px;
+        z-index: 5;
+        border-top: 1px solid rgba(255, 255, 255, 0.4);
+        border-bottom: 3px double rgba(255, 255, 255, 0.4);
+        padding: 12px 0 8px;
+      }
+      .fi-name {
+        font-family: var(--brush);
+        font-size: 46px;
+        color: var(--paper);
+        letter-spacing: 4px;
+        line-height: 1.1;
+        text-shadow:
+          0 2px 16px rgba(0, 0, 0, 0.9),
+          0 0 6px rgba(0, 0, 0, 0.6);
+        margin-bottom: 6px;
+      }
+      .fi-meta {
+        font-family: var(--serif);
+        font-size: 12px;
+        color: rgba(245, 240, 232, 0.85);
+        letter-spacing: 4px;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-variant: small-caps;
+      }
+      .fi-meta span {
+        opacity: 0.6;
+      }
+
+      .front-poem {
+        position: absolute;
+        top: 40px;
+        right: 100px;
+        writing-mode: vertical-rl;
+        color: rgba(245, 240, 232, 0.95);
+        font-family: var(--brush);
+        font-size: 20px;
+        letter-spacing: 6px;
+        line-height: 2.2;
+        text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+        z-index: 5;
+        text-align: left;
+        max-height: 280px;
+        overflow: hidden;
+      }
+      .poem-line {
+        display: inline-block;
+      }
+      .poem-line:nth-child(even) {
+        padding-top: 1.8em;
+      }
+      .poem-line:nth-child(3n) {
+        padding-top: 0.9em;
+      }
+
+      /* 水墨晕染底边色卡 */
+      .front-swatches {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        display: flex;
+        z-index: 5;
+        mix-blend-mode: normal;
+        align-items: flex-end;
+      }
+      .fsw {
+        flex: 1;
+        height: 100%;
+        transition: all 0.4s ease;
+        cursor: crosshair;
+        filter: url(#ink-bleed);
+        opacity: 0.85;
+        transform-origin: bottom;
+      }
+      .fsw:hover {
+        transform: scaleY(1.3);
+        opacity: 1;
+      }
+
+      /* ─── 背面 (色彩考证) ─── */
+      .face-back {
+        background-color: var(--paper);
+        /* 窗棂水印 */
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cg stroke='%232C2416' stroke-width='0.5' fill='none' opacity='0.04'%3E%3Cpath d='M0,30 L60,30 M30,0 L30,60 M15,15 L45,15 L45,45 L15,45 Z'/%3E%3C/g%3E%3C/svg%3E");
+      }
+      .back-top-rule {
+        position: absolute;
+        top: 12px;
+        left: 16px;
+        right: 16px;
+        border-top: 3px double var(--seal);
+        height: 2px;
+        opacity: 0.8;
+      }
+
+      .back-left {
+        position: absolute;
+        top: 28px;
+        left: 24px;
+        width: 55%;
+        bottom: 20px;
+        display: flex;
+        flex-direction: column;
+      }
+      .back-sec-title {
+        font-size: 10px;
+        letter-spacing: 6px;
+        color: var(--seal);
+        font-weight: 600;
+        font-family: var(--serif);
+        text-align: center;
+        margin-bottom: 24px;
+        font-variant: small-caps;
+      }
+      .back-sec-title::before,
+      .back-sec-title::after {
+        content: "·";
+        margin: 0 8px;
+      }
+
+      /* 可视化 1: 色环 (SVG) */
+      .vis-radial {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 130px;
+        margin-bottom: 20px;
+      }
+      .vis-radial svg {
+        overflow: visible;
+        filter: url(#rough-edge);
+      }
+      .pagoda-icon {
+        fill: var(--ink);
+        opacity: 0.8;
+      }
+
+      /* 可视化 2: 染坊色谱 (垂直条) */
+      .vis-strips {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        height: 70px;
+        margin-bottom: 20px;
+        padding: 0 10px;
+      }
+      .v-strip-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .v-strip-color {
+        width: 100%;
+        flex: 1;
+        filter: url(#rough-edge);
+        mix-blend-mode: multiply;
+        border-radius: 1px;
+      }
+      .v-strip-hex {
+        font-family: var(--mono);
+        font-size: 7px;
+        color: var(--ink);
+        margin-top: 4px;
+        transform: scale(0.9);
+      }
+      .v-strip-pct {
+        font-family: var(--mono);
+        font-size: 7px;
+        color: rgba(44, 36, 22, 0.6);
+      }
+
+      /* 可视化 3: 冷暖墨痕 */
+      .vis-bands {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: auto;
+        border-top: 1px dotted rgba(44, 36, 22, 0.2);
+        padding-top: 12px;
+      }
+      .band-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .band-label {
+        font-size: 10px;
+        color: var(--ink);
+        font-weight: 600;
+        width: 24px;
+      }
+      .band-en {
+        font-family: var(--mono);
+        font-size: 7px;
+        color: rgba(44, 36, 22, 0.5);
+        width: 36px;
+        text-transform: uppercase;
+      }
+      .band-track {
+        flex: 1;
+        height: 8px;
+        position: relative;
+      }
+      .band-fill {
+        height: 100%;
+        filter: url(#rough-edge);
+        mix-blend-mode: multiply;
+        position: absolute;
+        left: 0;
+        top: 0;
+      }
+      .band-pct {
+        font-family: var(--mono);
+        font-size: 8px;
+        color: var(--ink);
+        width: 24px;
+        text-align: right;
+      }
+
+      .back-divider {
+        position: absolute;
+        top: 32px;
+        bottom: 32px;
+        left: 58%;
+        border-left: 1px solid rgba(44, 36, 22, 0.15);
+      }
+
+      /* 右侧邮政区 */
+      .back-right {
+        position: absolute;
+        top: 28px;
+        left: 62%;
+        right: 20px;
+        bottom: 20px;
+        display: flex;
+        flex-direction: column;
+      }
+      .stamp-box {
+        align-self: flex-end;
+        width: 60px;
+        height: 72px;
+        border: 1px dashed rgba(44, 36, 22, 0.3);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin-bottom: 24px;
+        background-image:
+          linear-gradient(rgba(44, 36, 22, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(44, 36, 22, 0.05) 1px, transparent 1px);
+        background-size: 10px 10px;
+      }
+      .stamp-box span:first-child {
+        font-size: 11px;
+        color: var(--ink);
+        letter-spacing: 2px;
+      }
+      .stamp-box span:last-child {
+        font-family: var(--mono);
+        font-size: 7px;
+        color: rgba(44, 36, 22, 0.5);
+      }
+
+      .postmark {
+        width: 68px;
+        height: 68px;
+        border: 2px solid var(--seal);
+        border-radius: 50%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.8;
+        margin-bottom: 16px;
+        transform: rotate(-5deg);
+        filter: url(#rough-edge);
+        mix-blend-mode: multiply;
+      }
+      .pm-zh {
+        font-family: var(--brush);
+        font-size: 20px;
+        color: var(--seal);
+        line-height: 1;
+        margin-bottom: 2px;
+      }
+      .pm-en {
+        font-family: var(--mono);
+        font-size: 8px;
+        color: var(--seal);
+        letter-spacing: 1px;
+      }
+
+      .pc-label {
+        font-size: 12px;
+        letter-spacing: 8px;
+        color: var(--ink);
+        margin-bottom: 20px;
+        font-weight: 600;
+      }
+      .addr-lines {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 16px;
+        margin-bottom: 8px;
+      }
+      .addr-line {
+        height: 1px;
+        border-bottom: 1px solid rgba(44, 36, 22, 0.2);
+      }
+
+      .back-footer {
+        position: absolute;
+        bottom: 16px;
+        left: 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        z-index: 10;
+      }
+      .back-footer-logo {
+        height: 18px;
+        width: auto;
+        mix-blend-mode: multiply;
+        opacity: 0.85;
+      }
+      .back-footer span {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: rgba(44, 36, 22, 0.5);
+        letter-spacing: 1px;
+      }
+
+      .front-logo {
+        position: absolute;
+        top: 24px;
+        left: 30px;
+        height: 22px;
+        width: auto;
+        z-index: 10;
+        filter: brightness(0) invert(1)
+          drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
+        opacity: 0.9;
+      }
+
+      .flip-hint {
+        position: absolute;
+        bottom: 30px;
+        display: none;
+        align-items: center;
+        gap: 16px;
+        font-size: 11px;
+        color: rgba(44, 36, 22, 0.5);
+        letter-spacing: 3px;
+        text-transform: uppercase;
+      }
+      .flip-hint::before,
+      .flip-hint::after {
+        content: "";
+        width: 24px;
+        height: 1px;
+        background: rgba(44, 36, 22, 0.3);
+      }
+
+      #toast {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%) translateY(-20px);
+        background: var(--ink);
+        color: var(--paper);
+        padding: 12px 24px;
+        font-size: 12px;
+        letter-spacing: 1px;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s;
+        z-index: 100;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--gold);
+      }
+      #toast.show {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(-50%) translateY(0);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- SVG 滤镜定义：用于渲染水墨毛糙边缘 -->
+    <svg class="svg-filters">
+      <defs>
+        <!-- 毛糙边缘滤镜 -->
+        <filter id="rough-edge" x="-10%" y="-10%" width="120%" height="120%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.2"
+            numOctaves="3"
+            result="noise"
+          />
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="noise"
+            scale="2"
+            xChannelSelector="R"
+            yChannelSelector="G"
+          />
+        </filter>
+        <!-- 水墨向下晕染滤镜 -->
+        <filter id="ink-bleed" x="-10%" y="-10%" width="120%" height="120%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.05 0.5"
+            numOctaves="3"
+            result="noise"
+          />
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="noise"
+            scale="6"
+            xChannelSelector="R"
+            yChannelSelector="G"
+          />
+        </filter>
+      </defs>
+    </svg>
+
+    <div id="toast">已复制</div>
+    <div class="app">
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="brand">
+          <img
+            src="logo.png"
+            alt="彩构寻踪"
+            class="brand-logo"
+            onerror="
+              this.style.display = 'none';
+              this.nextElementSibling.style.display = 'block';
+            "
+          />
+          <span class="brand-title" style="display: none">彩构寻踪</span>
+          <span class="brand-sub">古邮映画：个性化定制</span>
+        </div>
+
+        <div class="sb-section" style="animation-delay: 0s">
+          <div class="drop-zone" id="dropZone">
+            <input type="file" id="fileInput" accept="image/*" />
+            <span class="dz-icon">帖</span>
+            <div class="dz-title">置入图景</div>
+            <div class="dz-sub">JPG · PNG · WEBP</div>
+          </div>
+          <div class="loading-row" id="loadingRow">
+            <div class="ld"></div>
+            <div class="ld"></div>
+            <div class="ld"></div>
+            <span>提取丹青色谱中…</span>
+          </div>
+        </div>
+
+        <div
+          class="sb-section"
+          id="infoSection"
+          style="display: none; animation-delay: 0.1s"
+        >
+          <div class="form-group">
+            <span class="sb-label">建筑题名</span>
+            <input class="form-input" id="fName" placeholder="例如：拙政园" />
+          </div>
+          <div class="form-group">
+            <span class="sb-label">流派渊源</span>
+            <select class="form-select" id="fSchool">
+              <option value="">请选择渊源</option>
+              <option value="苏派园林">苏派园林</option>
+              <option value="皖派徽派">皖派徽派</option>
+              <option value="京派官式">京派官式</option>
+              <option value="晋派大院">晋派大院</option>
+              <option value="闽派土楼">闽派土楼</option>
+              <option value="custom">自定义 / 其他</option>
+            </select>
+            <input
+              class="form-input"
+              id="fSchoolCustom"
+              placeholder="请输入自定义流派"
+              style="display: none; margin-top: 8px"
+            />
+          </div>
+          <div class="form-group">
+            <span class="sb-label">地理形胜</span>
+            <input
+              class="form-input"
+              id="fLocation"
+              placeholder="例如：江苏苏州"
+            />
+          </div>
+          <div class="form-group">
+            <span class="sb-label">考证年代</span>
+            <input
+              class="form-input"
+              id="fDynasty"
+              placeholder="例如：明正德四年"
+            />
+          </div>
+          <div class="form-group">
+            <span class="sb-label">题跋 / 诗词</span>
+            <textarea
+              class="form-input"
+              id="fPoem"
+              rows="3"
+              placeholder="例如：山色空蒙雨亦奇..."
+            ></textarea>
+          </div>
+        </div>
+
+        <div
+          class="sb-section"
+          id="colorSection"
+          style="display: none; animation-delay: 0.2s"
+        >
+          <span
+            class="sb-label"
+            style="display: flex; justify-content: space-between"
+            ><span>提炼色卡</span
+            ><span
+              style="font-weight: normal; font-size: 9px; color: var(--seal)"
+              >点击复制</span
+            ></span
+          >
+          <div class="chips-grid" id="colorChips"></div>
+        </div>
+
+        <div
+          class="sb-section"
+          id="actionSection"
+          style="display: none; border-bottom: none; animation-delay: 0.3s"
+        >
+          <button class="act-btn primary" id="btnFlip">
+            <span id="flipBtnTxt">⇄ 翻转赏鉴</span>
+          </button>
+          <div style="display: flex; gap: 8px">
+            <button class="act-btn" id="dlFront">↓ 存正面</button>
+            <button class="act-btn" id="dlBack">↓ 存背面</button>
+          </div>
+          <button
+            class="act-btn"
+            id="btnReset"
+            style="
+              opacity: 0.6;
+              font-size: 12px;
+              border-style: dashed;
+              margin-top: 8px;
+            "
+          >
+            重新拾取
+          </button>
+        </div>
+
+        <div class="sb-foot">
+          · 采用 K-Means 算法提取色彩<br />
+          · 生成带有宣纸水印与水墨晕染之相片<br />
+          · 建议采用风景或古建图景以获佳效
+        </div>
+      </aside>
+
+      <!-- PREVIEW -->
+      <main class="preview-area" id="previewArea">
+        <div class="card-scale-wrapper" id="scaleWrapper">
+          <div class="card-scene" id="cardScene">
+            <div class="card-tilt" id="cardTilt">
+              <div class="card-inner" id="cardInner">
+                <!-- FRONT -->
+                <div class="face face-front" id="cardFront">
+                  <div class="card-glare" id="glareFront"></div>
+                  <div class="front-empty" id="emptyState">
+                    <span class="fe-icon">印</span>
+                    <span class="fe-text">静候图景载入</span>
+                  </div>
+                  <img class="photo-bg" id="photoBg" />
+                  <div class="photo-vignette"></div>
+
+                  <div class="front-seal">
+                    <div class="seal-inner">
+                      <span class="seal-zh">彩构</span
+                      ><span class="seal-en" id="sealDate"></span>
+                    </div>
+                  </div>
+
+                  <img
+                    src="logo.png"
+                    class="front-logo"
+                    onerror="this.style.display = 'none'"
+                  />
+
+                  <div
+                    class="front-info-block"
+                    id="frontInfoBlock"
+                    style="display: none"
+                  >
+                    <div class="fi-name" id="fiName">—</div>
+                    <div class="fi-meta" id="fiMeta"><span>—</span></div>
+                    <div
+                      class="fi-meta"
+                      id="fiDynasty"
+                      style="margin-top: 2px"
+                    ></div>
+                  </div>
+
+                  <div class="front-poem" id="fiPoem"></div>
+                  <div class="front-swatches" id="frontSwatches"></div>
+                </div>
+
+                <!-- BACK -->
+                <div class="face card-back-face" id="cardBack">
+                  <div class="card-glare" id="glareBack"></div>
+                  <div class="back-top-rule"></div>
+
+                  <div class="back-left">
+                    <div class="back-sec-title">色彩考证 · Color Analysis</div>
+
+                    <!-- Vis 1: 色环 -->
+                    <div class="vis-radial" id="visRadial"></div>
+
+                    <!-- Vis 2: 染坊垂直色卡 -->
+                    <div class="vis-strips" id="visStrips"></div>
+
+                    <!-- Vis 3: 冷暖墨痕 -->
+                    <div class="vis-bands" id="visBands"></div>
+                  </div>
+
+                  <div class="back-divider"></div>
+
+                  <div class="back-right">
+                    <div class="stamp-box">
+                      <span>贴邮票处</span><span>STAMP</span>
+                    </div>
+                    <div class="postmark">
+                      <span class="pm-zh">彩构</span
+                      ><span class="pm-en" id="pmDate">2026.04.14</span>
+                    </div>
+                    <div class="pc-label">明信片 · POSTCARD</div>
+                    <div class="addr-lines">
+                      <div class="addr-line"></div>
+                      <div class="addr-line"></div>
+                      <div class="addr-line"></div>
+                    </div>
+                  </div>
+
+                  <div class="back-footer" id="backFooter">
+                    <img
+                      src="logo.png"
+                      class="back-footer-logo"
+                      onerror="
+                        this.style.display = 'none';
+                        this.nextElementSibling.style.display = 'inline';
+                      "
+                    />
+                    <span class="bf-fallback" style="display: none"
+                      >
+                    </span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="flip-hint" id="flipHint">点击交互 · 观摩墨色分析</div>
+      </main>
+    </div>
+
+    <script>
+      "use strict";
+
+      const DOM = {
+        dz: document.getElementById("dropZone"),
+        fi: document.getElementById("fileInput"),
+        loadingRow: document.getElementById("loadingRow"),
+        emptyState: document.getElementById("emptyState"),
+        photoBg: document.getElementById("photoBg"),
+        frontInfoBlock: document.getElementById("frontInfoBlock"),
+        infoSection: document.getElementById("infoSection"),
+        colorSection: document.getElementById("colorSection"),
+        actionSection: document.getElementById("actionSection"),
+        flipHint: document.getElementById("flipHint"),
+        scaleWrapper: document.getElementById("scaleWrapper"),
+        cardScene: document.getElementById("cardScene"),
+        cardTilt: document.getElementById("cardTilt"),
+        cardInner: document.getElementById("cardInner"),
+        glareFront: document.getElementById("glareFront"),
+        glareBack: document.getElementById("glareBack"),
+        frontSwatches: document.getElementById("frontSwatches"),
+        colorChips: document.getElementById("colorChips"),
+        fiName: document.getElementById("fiName"),
+        fiMeta: document.getElementById("fiMeta"),
+        fiDynasty: document.getElementById("fiDynasty"),
+        fiPoem: document.getElementById("fiPoem"),
+        visRadial: document.getElementById("visRadial"),
+        visStrips: document.getElementById("visStrips"),
+        visBands: document.getElementById("visBands"),
+        pmDate: document.getElementById("pmDate"),
+        sealDate: document.getElementById("sealDate"),
+        flipBtnTxt: document.getElementById("flipBtnTxt"),
+        fName: document.getElementById("fName"),
+        fSchool: document.getElementById("fSchool"),
+        fSchoolCustom: document.getElementById("fSchoolCustom"),
+        fLocation: document.getElementById("fLocation"),
+        fDynasty: document.getElementById("fDynasty"),
+        fPoem: document.getElementById("fPoem"),
+        btnFlip: document.getElementById("btnFlip"),
+        btnReset: document.getElementById("btnReset"),
+        dlFront: document.getElementById("dlFront"),
+        dlBack: document.getElementById("dlBack"),
+        toast: document.getElementById("toast"),
+      };
+
+      let colors = [];
+      let flipped = false;
+      let imgObjectURL = null;
+
+      // 初始化日期
+      const today = new Date();
+      DOM.pmDate.textContent = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, "0")}.${String(today.getDate()).padStart(2, "0")}`;
+      DOM.sealDate.textContent = today.getFullYear();
+
+      // 自适应缩放
+      function adjustScale() {
+        const container = DOM.scaleWrapper;
+        const padding = 80;
+        const availableW = container.clientWidth - padding;
+        const availableH = container.clientHeight - padding;
+        const scale = Math.min(1, availableW / 600, availableH / 400);
+        DOM.cardScene.style.transform = `scale(${scale})`;
+      }
+      window.addEventListener("resize", adjustScale);
+      adjustScale();
+
+      // 事件绑定
+      DOM.dz.addEventListener("click", () => DOM.fi.click());
+      DOM.dz.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        DOM.dz.classList.add("over");
+      });
+      DOM.dz.addEventListener("dragleave", () =>
+        DOM.dz.classList.remove("over"),
+      );
+      DOM.dz.addEventListener("drop", (e) => {
+        e.preventDefault();
+        DOM.dz.classList.remove("over");
+        loadFile(e.dataTransfer.files[0]);
+      });
+      DOM.fi.addEventListener("change", (e) => loadFile(e.target.files[0]));
+      DOM.btnFlip.addEventListener("click", flipCard);
+      DOM.btnReset.addEventListener("click", reset);
+      DOM.dlFront.addEventListener("click", () => downloadCard("front"));
+      DOM.dlBack.addEventListener("click", () => downloadCard("back"));
+      DOM.cardScene.addEventListener("click", (e) => {
+        if (e.target.classList.contains("fsw") || e.target.closest(".fsw"))
+          return;
+        if (colors.length) flipCard();
+      });
+
+      // 3D 光影跟随
+      DOM.cardScene.addEventListener("mousemove", (e) => {
+        if (!colors.length) return;
+        const rect = DOM.cardScene.getBoundingClientRect();
+        const x = e.clientX - rect.left,
+          y = e.clientY - rect.top;
+        const cx = rect.width / 2,
+          cy = rect.height / 2;
+        const rotateX = ((y - cy) / cy) * -6,
+          rotateY = ((x - cx) / cx) * 6;
+        DOM.cardTilt.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+
+        const glareX = (x / rect.width) * 100,
+          glareY = (y / rect.height) * 100;
+        if (flipped) {
+          DOM.glareBack.style.opacity = "1";
+          DOM.glareBack.style.background = `radial-gradient(circle at ${100 - glareX}% ${glareY}%, rgba(255,255,255,0.4) 0%, transparent 50%)`;
+        } else {
+          DOM.glareFront.style.opacity = "1";
+          DOM.glareFront.style.background = `radial-gradient(circle at ${glareX}% ${glareY}%, rgba(255,255,255,0.2) 0%, transparent 60%)`;
+        }
+      });
+      DOM.cardScene.addEventListener("mouseleave", () => {
+        DOM.cardTilt.style.transform = `rotateX(0deg) rotateY(0deg)`;
+        DOM.glareFront.style.opacity = "0";
+        DOM.glareBack.style.opacity = "0";
+      });
+
+      // 防抖
+      function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+          clearTimeout(timeout);
+          timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+      }
+      const debouncedUpdateFront = debounce(updateFront, 150);
+      ["fName", "fLocation", "fDynasty", "fPoem", "fSchoolCustom"].forEach(
+        (id) => DOM[id].addEventListener("input", debouncedUpdateFront),
+      );
+      DOM.fSchool.addEventListener("change", (e) => {
+        if (e.target.value === "custom") {
+          DOM.fSchoolCustom.style.display = "block";
+          DOM.fSchoolCustom.focus();
+        } else {
+          DOM.fSchoolCustom.style.display = "none";
+        }
+        updateFront();
+      });
+
+      // 复制
+      function showToast(msg) {
+        DOM.toast.textContent = msg;
+        DOM.toast.classList.add("show");
+        setTimeout(() => DOM.toast.classList.remove("show"), 2000);
+      }
+      function copyColor(hex) {
+        const t = document.createElement("textarea");
+        t.value = hex;
+        document.body.appendChild(t);
+        t.select();
+        try {
+          document.execCommand("copy");
+          showToast(`拾取色值：${hex}`);
+        } catch (e) {}
+        document.body.removeChild(t);
+      }
+
+      // 加载图片与K-Means (同之前逻辑)
+      function loadFile(file) {
+        if (!file || !file.type.startsWith("image/")) return;
+        if (imgObjectURL) URL.revokeObjectURL(imgObjectURL);
+        imgObjectURL = URL.createObjectURL(file);
+        DOM.loadingRow.style.display = "flex";
+        DOM.emptyState.style.display = "none";
+        DOM.photoBg.src = imgObjectURL;
+        DOM.photoBg.style.display = "block";
+        setTimeout(() => processImage(imgObjectURL), 100);
+      }
+
+      function processImage(url) {
+        const img = new Image();
+        img.onload = () => {
+          colors = extractColors(img, 7); // 提取7个代表色以适应新版面
+          renderFrontSwatches();
+          renderChips();
+          renderBack();
+          updateFront();
+          DOM.frontInfoBlock.style.display = "block";
+          DOM.loadingRow.style.display = "none";
+          DOM.infoSection.style.display = "block";
+          DOM.colorSection.style.display = "block";
+          DOM.actionSection.style.display = "block";
+          DOM.flipHint.style.display = "flex";
+        };
+        img.src = url;
+      }
+
+      function extractColors(img, k) {
+        const c = document.createElement("canvas");
+        const sz = 120;
+        let w = img.naturalWidth,
+          h = img.naturalHeight;
+        if (w > sz || h > sz) {
+          if (w > h) {
+            h = Math.round((h * sz) / w);
+            w = sz;
+          } else {
+            w = Math.round((w * sz) / h);
+            h = sz;
+          }
+        }
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0, w, h);
+        const d = ctx.getImageData(0, 0, w, h).data;
+        const pixels = [];
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 128) continue;
+          pixels.push([d[i], d[i + 1], d[i + 2]]);
+        }
+        return kmeans(pixels, Math.min(k, pixels.length));
+      }
+
+      function kmeans(pixels, k) {
+        const centers = [
+          [...pixels[Math.floor(Math.random() * pixels.length)]],
+        ];
+        while (centers.length < k) {
+          const dists = pixels.map((p) =>
+            Math.min(
+              ...centers.map(
+                (c) =>
+                  (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2,
+              ),
+            ),
+          );
+          const tot = dists.reduce((s, d) => s + d, 0);
+          if (tot === 0) break;
+          let r = Math.random() * tot;
+          let added = false;
+          for (let i = 0; i < dists.length; i++) {
+            r -= dists[i];
+            if (r <= 0) {
+              centers.push([...pixels[i]]);
+              added = true;
+              break;
+            }
+          }
+          if (!added) centers.push([...pixels[pixels.length - 1]]);
+        }
+        const labels = new Int32Array(pixels.length);
+        for (let iter = 0; iter < 25; iter++) {
+          let changed = false;
+          for (let i = 0; i < pixels.length; i++) {
+            let best = 0,
+              bestD = Infinity;
+            for (let c = 0; c < centers.length; c++) {
+              const d =
+                (pixels[i][0] - centers[c][0]) ** 2 +
+                (pixels[i][1] - centers[c][1]) ** 2 +
+                (pixels[i][2] - centers[c][2]) ** 2;
+              if (d < bestD) {
+                bestD = d;
+                best = c;
+              }
+            }
+            if (labels[i] !== best) {
+              labels[i] = best;
+              changed = true;
+            }
+          }
+          if (!changed) break;
+          const sums = Array.from({ length: k }, () => new Int32Array(4));
+          for (let i = 0; i < pixels.length; i++) {
+            const c = labels[i];
+            sums[c][0] += pixels[i][0];
+            sums[c][1] += pixels[i][1];
+            sums[c][2] += pixels[i][2];
+            sums[c][3]++;
+          }
+          for (let c = 0; c < k; c++)
+            if (sums[c][3] > 0)
+              centers[c] = [
+                sums[c][0] / sums[c][3],
+                sums[c][1] / sums[c][3],
+                sums[c][2] / sums[c][3],
+              ];
+        }
+        const counts = new Array(k).fill(0);
+        labels.forEach((l) => counts[l]++);
+        return centers
+          .map((c, i) => {
+            const [r, g, b] = c.map(Math.round);
+            const hex =
+              "#" +
+              [r, g, b]
+                .map((v) => v.toString(16).padStart(2, "0").toUpperCase())
+                .join("");
+            const max = Math.max(r, g, b) / 255,
+              min = Math.min(r, g, b) / 255,
+              d = max - min;
+            let h = 0;
+            if (d > 0) {
+              if (max === r / 255) h = ((g / 255 - b / 255) / d) % 6;
+              else if (max === g / 255) h = (b / 255 - r / 255) / d + 2;
+              else h = (r / 255 - g / 255) / d + 4;
+              h /= 6;
+              if (h < 0) h += 1;
+            }
+            return {
+              hex,
+              rgb: [r, g, b],
+              h: h * 360,
+              s: max > 0 ? d / max : 0,
+              v: max,
+              count: counts[i],
+            };
+          })
+          .filter((c) => c.count > 0)
+          .sort((a, b) => b.count - a.count);
+      }
+
+      // 视图更新
+      function renderFrontSwatches() {
+        DOM.frontSwatches.innerHTML = colors
+          .map(
+            (c) =>
+              `<div class="fsw" style="background:${c.hex}" title="拾取 ${c.hex}" onclick="copyColor('${c.hex}')"></div>`,
+          )
+          .join("");
+      }
+      function renderChips() {
+        DOM.colorChips.innerHTML = colors
+          .map(
+            (c) =>
+              `<div class="chip" style="background:${c.hex}" onclick="copyColor('${c.hex}')"><span class="chip-tooltip">${c.hex}</span></div>`,
+          )
+          .join("");
+      }
+
+      function updateFront() {
+        const name = DOM.fName.value || "古建风华";
+        const school =
+          DOM.fSchool.value === "custom"
+            ? DOM.fSchoolCustom.value.trim()
+            : DOM.fSchool.value;
+        const location = DOM.fLocation.value,
+          dynasty = DOM.fDynasty.value;
+        DOM.fiName.textContent = name;
+
+        let metaHtml = "";
+        if (school) metaHtml += `<span>${school}</span>`;
+        if (school && location) metaHtml += `<span>·</span>`;
+        if (location) metaHtml += `<span>${location}</span>`;
+        DOM.fiMeta.innerHTML = metaHtml || "<span>—</span>";
+
+        DOM.fiDynasty.innerHTML = dynasty ? `<span>${dynasty}</span>` : "";
+
+        const poemText = DOM.fPoem.value.trim();
+        if (poemText) {
+          const lines = poemText.split("\n");
+          DOM.fiPoem.innerHTML = lines
+            .map((line) => `<span class="poem-line">${line}</span>`)
+            .join("");
+        } else {
+          DOM.fiPoem.innerHTML = "";
+        }
+      }
+
+      // 渲染背面三个可视化
+      function renderBack() {
+        const total = colors.reduce((s, c) => s + c.count, 0);
+
+        // Vis 1: 色环 (SVG 手绘感)
+        let arcsHtml = "";
+        let a = -Math.PI / 2;
+        const cx = 65,
+          cy = 65,
+          r = 50,
+          ir = 34; // 圆心与半径
+        colors.forEach((c) => {
+          const da = (c.count / total) * 2 * Math.PI;
+          if (da < 0.05) {
+            a += da;
+            return;
+          }
+          const x1 = cx + r * Math.cos(a),
+            y1 = cy + r * Math.sin(a),
+            x2 = cx + r * Math.cos(a + da),
+            y2 = cy + r * Math.sin(a + da);
+          const ix1 = cx + ir * Math.cos(a),
+            iy1 = cy + ir * Math.sin(a),
+            ix2 = cx + ir * Math.cos(a + da),
+            iy2 = cy + ir * Math.sin(a + da);
+          const la = da > Math.PI ? 1 : 0;
+          // 绘制弧形路径
+          const d = `M${x1},${y1} A${r},${r} 0 ${la},1 ${x2},${y2} L${ix2},${iy2} A${ir},${ir} 0 ${la},0 ${ix1},${iy1} Z`;
+          arcsHtml += `<path d="${d}" fill="${c.hex}" opacity="0.9" />`;
+
+          // 添加悬浮标签 (仅对占比大于5%的颜色)
+          if (da > 0.3) {
+            const midA = a + da / 2;
+            const lx = cx + (r + 12) * Math.cos(midA),
+              ly = cy + (r + 12) * Math.sin(midA);
+            arcsHtml += `<text x="${lx}" y="${ly}" font-family="var(--mono)" font-size="6" fill="var(--ink)" text-anchor="middle" dominant-baseline="middle">${((c.count / total) * 100).toFixed(0)}%</text>`;
+          }
+          a += da;
+        });
+
+        // 中心水墨小亭子图标
+        const pagoda = `<g transform="translate(56, 54) scale(0.7)" class="pagoda-icon">
+    <path d="M12,2 L14,2 L14,4 L16,4 L16,2 L18,2 L18,5 L23,8 L23,10 L19,10 L19,14 L24,17 L24,19 L18,19 L18,24 L12,24 L12,19 L6,19 L6,17 L11,14 L11,10 L7,10 L7,8 L12,5 Z" />
+  </g>`;
+
+        DOM.visRadial.innerHTML = `<svg width="130" height="130" viewBox="0 0 130 130">${arcsHtml}${pagoda}</svg>`;
+
+        // Vis 2: 染坊色谱 (垂直条)
+        DOM.visStrips.innerHTML = colors
+          .map((c) => {
+            const pct = ((c.count / total) * 100).toFixed(1);
+            const w = Math.max(12, (c.count / total) * 100); // 最小宽度
+            return `
+      <div class="v-strip-col" style="flex: ${c.count}; max-width: 40px; min-width: 16px;">
+        <div class="v-strip-color" style="background: linear-gradient(to bottom, ${c.hex} 0%, rgba(245,240,232,0) 100%);"></div>
+        <div class="v-strip-hex">${c.hex}</div>
+        <div class="v-strip-pct">${pct}%</div>
+      </div>
+    `;
+          })
+          .join("");
+
+        // Vis 3: 冷暖墨痕
+        let warm = 0,
+          cool = 0,
+          wColor = "#8B2020",
+          cColor = "#A8B89A",
+          nColor = "#C4A55A";
+        colors.forEach((c) => {
+          const r = c.count / total;
+          if (c.s > 0.15) {
+            if (c.h < 60 || c.h > 300) {
+              warm += r;
+              if (r > 0.1) wColor = c.hex;
+            } else if (c.h > 150 && c.h < 270) {
+              cool += r;
+              if (r > 0.1) cColor = c.hex;
+            }
+          } else {
+            if (r > 0.1) nColor = c.hex;
+          }
+        });
+        const neutral = Math.max(0, 1 - warm - cool);
+        const wP = Math.round(warm * 100),
+          cP = Math.round(cool * 100),
+          nP = Math.round(neutral * 100);
+
+        DOM.visBands.innerHTML = `
+    <div class="band-row"><div class="band-label">暖调</div><div class="band-en">WARM</div>
+      <div class="band-track"><div class="band-fill" style="width:${Math.max(2, wP)}%; background:${wColor};"></div></div>
+      <div class="band-pct">${wP}%</div>
+    </div>
+    <div class="band-row"><div class="band-label">冷调</div><div class="band-en">COOL</div>
+      <div class="band-track"><div class="band-fill" style="width:${Math.max(2, cP)}%; background:${cColor};"></div></div>
+      <div class="band-pct">${cP}%</div>
+    </div>
+    <div class="band-row"><div class="band-label">中性</div><div class="band-en">NEUTRAL</div>
+      <div class="band-track"><div class="band-fill" style="width:${Math.max(2, nP)}%; background:${nColor}; opacity:0.8"></div></div>
+      <div class="band-pct">${nP}%</div>
+    </div>
+  `;
+      }
+
+      function flipCard() {
+        flipped = !flipped;
+        DOM.cardInner.classList.toggle("flipped", flipped);
+        DOM.flipBtnTxt.textContent = flipped
+          ? "⇄ 查看正面图景"
+          : "⇄ 翻转赏鉴考证";
+        DOM.cardTilt.style.transform = `rotateX(0deg) rotateY(0deg)`;
+        DOM.glareFront.style.opacity = "0";
+        DOM.glareBack.style.opacity = "0";
+      }
+
+      // ─── 导出 Canvas 绘图 ───
+      function getCSSVar(name) {
+        return getComputedStyle(document.documentElement)
+          .getPropertyValue(name)
+          .trim();
+      }
+
+      // 绘制宣纸噪点 (Canvas Multiply)
+      function applyPaperTexture(ctx, W, H) {
+        const nCanvas = document.createElement("canvas");
+        nCanvas.width = 200;
+        nCanvas.height = 200;
+        const nCtx = nCanvas.getContext("2d");
+        const imgData = nCtx.createImageData(200, 200);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const v = Math.random() * 255;
+          data[i] = data[i + 1] = data[i + 2] = v;
+          data[i + 3] = 16; // Noise opacity
+        }
+        nCtx.putImageData(imgData, 0, 0);
+        ctx.save();
+        ctx.globalCompositeOperation = "multiply";
+        ctx.fillStyle = ctx.createPattern(nCanvas, "repeat");
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+      }
+
+      async function downloadCard(face) {
+        const btn = face === "front" ? DOM.dlFront : DOM.dlBack;
+        const origTxt = btn.textContent;
+        btn.textContent = "研墨绘制中…";
+        btn.disabled = true;
+
+        await document.fonts.ready;
+        try {
+          await Promise.allSettled([
+            document.fonts.load('900 70px "Zhi Mang Xing"'),
+            document.fonts.load('600 48px "Noto Serif SC"'),
+            document.fonts.load('300 22px "Noto Serif SC"'),
+            document.fonts.load('400 18px "DM Mono"'),
+          ]);
+        } catch (e) {}
+
+        const canvas = face === "front" ? await drawFront() : await drawBack();
+
+        // 应用全局老照片滤镜 (Sepia & Contrast) 在最后导出前
+        const outCanvas = document.createElement("canvas");
+        outCanvas.width = canvas.width;
+        outCanvas.height = canvas.height;
+        const outCtx = outCanvas.getContext("2d");
+        outCtx.filter = "sepia(12%) contrast(96%)";
+        outCtx.drawImage(canvas, 0, 0);
+
+        const name = DOM.fName.value || "古建明信片";
+        const link = document.createElement("a");
+        link.download = `${name}-${face === "front" ? "景" : "考"}.png`;
+        link.href = outCanvas.toDataURL("image/png", 1.0);
+        link.click();
+
+        btn.textContent = origTxt;
+        btn.disabled = false;
+        showToast("🎉 画卷已存入本地");
+      }
+
+      async function drawFront() {
+        const W = 1200,
+          H = 800; // 2x 分辨率
+        const cv = document.createElement("canvas");
+        cv.width = W;
+        cv.height = H;
+        const ctx = cv.getContext("2d");
+
+        ctx.fillStyle = getCSSVar("--ink");
+        ctx.fillRect(0, 0, W, H);
+
+        // 照片
+        if (imgObjectURL) {
+          const img = DOM.photoBg;
+          const ia = img.naturalWidth / img.naturalHeight;
+          const ca = W / H;
+          let sx, sy, sw, sh;
+          if (ia > ca) {
+            sh = img.naturalHeight;
+            sw = sh * ca;
+            sy = 0;
+            sx = (img.naturalWidth - sw) / 2;
+          } else {
+            sw = img.naturalWidth;
+            sh = sw / ca;
+            sx = 0;
+            sy = (img.naturalHeight - sh) / 2;
+          }
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+
+          // 模糊边缘渲染
+          const edgeCv = document.createElement("canvas");
+          edgeCv.width = W;
+          edgeCv.height = H;
+          const edgeCtx = edgeCv.getContext("2d");
+          edgeCtx.filter = "blur(16px)";
+          edgeCtx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+
+          edgeCtx.filter = "none";
+          edgeCtx.globalCompositeOperation = "destination-in";
+          const vgMask = edgeCtx.createRadialGradient(
+            W / 2,
+            H / 2,
+            H * 0.35,
+            W / 2,
+            H / 2,
+            H * 0.9,
+          );
+          vgMask.addColorStop(0, "transparent");
+          vgMask.addColorStop(1, "black");
+          edgeCtx.fillStyle = vgMask;
+          edgeCtx.fillRect(0, 0, W, H);
+
+          ctx.drawImage(edgeCv, 0, 0);
+        }
+
+        // 柔和晕染与纸质着色层 (Vignette Tint)
+        const vg = ctx.createRadialGradient(
+          W / 2,
+          H / 2,
+          H * 0.4,
+          W / 2,
+          H / 2,
+          H * 0.95,
+        );
+        vg.addColorStop(0, "rgba(0,0,0,0)");
+        vg.addColorStop(1, "rgba(44,36,22,0.25)");
+        ctx.fillStyle = vg;
+        ctx.fillRect(0, 0, W, H);
+
+        // 底部色卡晕染 (Canvas 模拟刷子边缘，绘制多层半透明交叠)
+        const sh2 = 120,
+          sw2 = W / colors.length;
+        colors.forEach((c, i) => {
+          ctx.fillStyle = c.hex;
+          ctx.globalAlpha = 0.85;
+          // 绘制稍微不规则的底边色块
+          ctx.beginPath();
+          ctx.moveTo(i * sw2, H);
+          ctx.lineTo(i * sw2, H - sh2 + Math.random() * 15);
+          ctx.lineTo((i + 1) * sw2, H - sh2 + Math.random() * 15);
+          ctx.lineTo((i + 1) * sw2, H);
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+
+        // 文武线边框
+        const bx = 60,
+          by = H - 200,
+          bw = W / 2;
+        ctx.strokeStyle = "rgba(255,255,255,0.4)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + bw, by);
+        ctx.stroke();
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(bx, by + 100);
+        ctx.lineTo(bx + bw, by + 100);
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bx, by + 108);
+        ctx.lineTo(bx + bw, by + 108);
+        ctx.stroke();
+
+        // 标题
+        const name = DOM.fName.value || "彩构寻踪";
+        ctx.shadowColor = "rgba(0,0,0,0.9)";
+        ctx.shadowBlur = 16;
+        ctx.shadowOffsetY = 4;
+        ctx.fillStyle = getCSSVar("--paper");
+        ctx.font = '900 92px "Zhi Mang Xing"';
+        ctx.fillText(name, bx, by + 76);
+
+        // 元数据
+        const school =
+          DOM.fSchool.value === "custom"
+            ? DOM.fSchoolCustom.value.trim()
+            : DOM.fSchool.value;
+        const location = DOM.fLocation.value,
+          dynasty = DOM.fDynasty.value;
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 2;
+        ctx.font = '300 24px "Noto Serif SC"';
+        let metaY = by + 140;
+        if (school || location) {
+          ctx.fillStyle = "rgba(245,240,232,0.85)";
+          const text = [school, location].filter(Boolean).join("  ·  ");
+          ctx.fillText(text, bx, metaY);
+          metaY += 34;
+        }
+        if (dynasty) {
+          ctx.fillStyle = "rgba(245,240,232,0.6)";
+          ctx.fillText(dynasty, bx, metaY);
+        }
+        ctx.shadowColor = "transparent";
+
+        // 诗词 (垂直书法排版)
+        const poem = DOM.fPoem.value.trim();
+        if (poem) {
+          ctx.save();
+          ctx.shadowColor = "rgba(0,0,0,0.9)";
+          ctx.shadowBlur = 12;
+          ctx.shadowOffsetY = 2;
+          ctx.fillStyle = "rgba(245,240,232,0.95)";
+          ctx.font = '400 36px "Zhi Mang Xing"';
+          ctx.textBaseline = "top";
+          ctx.textAlign = "center";
+          const lines = poem.split("\n");
+          let startPx = W - 200;
+          lines.forEach((line, idx) => {
+            let cy = 80;
+            // 错落有致的起笔偏移量
+            if (idx % 2 === 1) cy += 45;
+            else if (idx % 3 === 2) cy += 24;
+
+            for (let char of Array.from(line)) {
+              ctx.fillText(char, startPx, cy);
+              cy += 42;
+            }
+            startPx -= 56;
+          });
+          ctx.restore();
+        }
+
+        // 朱文印
+        const scx = W - 100,
+          scy = 100,
+          sr = 52;
+        ctx.save();
+        ctx.translate(scx, scy);
+        ctx.rotate((6 * Math.PI) / 180);
+        ctx.translate(-scx, -scy);
+        // 印泥底色与边框
+        ctx.fillStyle = "rgba(139,32,32,0.1)";
+        ctx.fillRect(scx - sr, scy - sr, sr * 2, sr * 2);
+        ctx.strokeStyle = getCSSVar("--seal");
+        ctx.lineWidth = 4;
+        ctx.strokeRect(scx - sr, scy - sr, sr * 2, sr * 2);
+        ctx.lineWidth = 2;
+        ctx.strokeRect(scx - sr + 6, scy - sr + 6, sr * 2 - 12, sr * 2 - 12);
+
+        ctx.fillStyle = getCSSVar("--seal");
+        ctx.textAlign = "center";
+        ctx.font = '400 36px "Zhi Mang Xing"';
+        ctx.fillText("彩構", scx, scy + 8);
+        ctx.font = '300 14px "DM Mono"';
+        ctx.fillText(DOM.sealDate.textContent, scx, scy + 32);
+        ctx.restore();
+        ctx.textAlign = "left";
+
+        // Logo 水印 (正面)
+        const logoImg = document.querySelector(".brand-logo");
+        if (
+          logoImg &&
+          logoImg.complete &&
+          logoImg.naturalWidth > 0 &&
+          logoImg.style.display !== "none"
+        ) {
+          const lh = 44;
+          const lw = lh * (logoImg.naturalWidth / logoImg.naturalHeight);
+
+          const offCv = document.createElement("canvas");
+          offCv.width = lw;
+          offCv.height = lh;
+          const offCtx = offCv.getContext("2d");
+          offCtx.drawImage(logoImg, 0, 0, lw, lh);
+          offCtx.globalCompositeOperation = "source-in";
+          offCtx.fillStyle = "rgba(245,240,232,0.95)";
+          offCtx.fillRect(0, 0, lw, lh);
+
+          ctx.save();
+          ctx.shadowColor = "rgba(0,0,0,0.8)";
+          ctx.shadowBlur = 12;
+          ctx.shadowOffsetY = 2;
+          ctx.drawImage(offCv, 60, 48);
+          ctx.restore();
+        }
+
+        applyPaperTexture(ctx, W, H);
+        return cv;
+      }
+
+      async function drawBack() {
+        const W = 1200,
+          H = 800;
+        const cv = document.createElement("canvas");
+        cv.width = W;
+        cv.height = H;
+        const ctx = cv.getContext("2d");
+        const paper = getCSSVar("--paper"),
+          ink = getCSSVar("--ink"),
+          seal = getCSSVar("--seal");
+
+        ctx.fillStyle = paper;
+        ctx.fillRect(0, 0, W, H);
+
+        // 绘制窗棂水印 (简单网格模式)
+        ctx.strokeStyle = "rgba(44,36,22,0.03)";
+        ctx.lineWidth = 1;
+        for (let i = 0; i < W; i += 60) {
+          ctx.beginPath();
+          ctx.moveTo(i, 0);
+          ctx.lineTo(i, H);
+          ctx.stroke();
+        }
+        for (let j = 0; j < H; j += 60) {
+          ctx.beginPath();
+          ctx.moveTo(0, j);
+          ctx.lineTo(W, j);
+          ctx.stroke();
+        }
+
+        // 顶部双线
+        ctx.strokeStyle = seal;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(32, 24);
+        ctx.lineTo(W - 32, 24);
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(32, 34);
+        ctx.lineTo(W - 32, 34);
+        ctx.stroke();
+
+        // 标题
+        ctx.fillStyle = seal;
+        ctx.font = '600 20px "Noto Serif SC"';
+        ctx.textAlign = "center";
+        ctx.fillText("·  色彩考证 · COLOR ANALYSIS  ·", 340, 90);
+        ctx.textAlign = "left";
+
+        const total = colors.reduce((s, c) => s + c.count, 0);
+
+        // Vis 1: 色环
+        let a = -Math.PI / 2;
+        const cx = 340,
+          cy = 250,
+          r = 100,
+          ir = 68;
+        colors.forEach((c) => {
+          const da = (c.count / total) * 2 * Math.PI;
+          if (da < 0.05) {
+            a += da;
+            return;
+          }
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, a, a + da);
+          ctx.arc(cx, cy, ir, a + da, a, true);
+          ctx.closePath();
+          ctx.fillStyle = c.hex;
+          ctx.globalAlpha = 0.9;
+          ctx.fill();
+          // 标签
+          if (da > 0.3) {
+            const midA = a + da / 2;
+            const lx = cx + (r + 24) * Math.cos(midA),
+              ly = cy + (r + 24) * Math.sin(midA);
+            ctx.fillStyle = ink;
+            ctx.font = '300 12px "DM Mono"';
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(((c.count / total) * 100).toFixed(0) + "%", lx, ly);
+            ctx.textAlign = "left";
+            ctx.textBaseline = "alphabetic";
+          }
+          a += da;
+        });
+        ctx.globalAlpha = 1;
+        // 中心亭子 (简易三角形+矩形)
+        ctx.fillStyle = ink;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 12);
+        ctx.lineTo(cx - 16, cy);
+        ctx.lineTo(cx + 16, cy);
+        ctx.fill();
+        ctx.fillRect(cx - 10, cy, 20, 10);
+        ctx.globalAlpha = 1;
+
+        // Vis 2: 染坊色谱
+        const stripY = 430,
+          stripH = 140,
+          totalW = 500,
+          startX = 90;
+        let currX = startX;
+        colors.forEach((c) => {
+          const sw = Math.max(24, (c.count / total) * totalW);
+          const grad = ctx.createLinearGradient(0, stripY, 0, stripY + stripH);
+          grad.addColorStop(0, c.hex);
+          grad.addColorStop(1, "rgba(245,240,232,0)");
+          ctx.fillStyle = grad;
+          ctx.fillRect(currX, stripY, sw - 8, stripH);
+          ctx.fillStyle = ink;
+          ctx.font = '300 12px "DM Mono"';
+          ctx.fillText(c.hex, currX, stripY + stripH + 20);
+          ctx.fillStyle = "rgba(44,36,22,0.6)";
+          ctx.fillText(
+            ((c.count / total) * 100).toFixed(1) + "%",
+            currX,
+            stripY + stripH + 36,
+          );
+          currX += sw;
+        });
+
+        // Vis 3: 冷暖墨痕
+        let warm = 0,
+          cool = 0,
+          wColor = "#8B2020",
+          cColor = "#A8B89A",
+          nColor = "#C4A55A";
+        colors.forEach((c) => {
+          const r = c.count / total;
+          if (c.s > 0.15) {
+            if (c.h < 60 || c.h > 300) {
+              warm += r;
+              if (r > 0.1) wColor = c.hex;
+            } else if (c.h > 150 && c.h < 270) {
+              cool += r;
+              if (r > 0.1) cColor = c.hex;
+            }
+          } else {
+            if (r > 0.1) nColor = c.hex;
+          }
+        });
+        const nP = Math.max(0, 1 - warm - cool);
+        const bands = [
+          { lbl: "暖调 WARM", pct: Math.round(warm * 100), col: wColor },
+          { lbl: "冷调 COOL", pct: Math.round(cool * 100), col: cColor },
+          { lbl: "中性 NEUTRAL", pct: Math.round(nP * 100), col: nColor },
+        ];
+        let bandY = 660;
+        bands.forEach((b) => {
+          ctx.fillStyle = ink;
+          ctx.font = '600 18px "Noto Serif SC"';
+          ctx.fillText(b.lbl.split(" ")[0], startX, bandY);
+          ctx.fillStyle = "rgba(44,36,22,0.5)";
+          ctx.font = '300 14px "DM Mono"';
+          ctx.fillText(b.lbl.split(" ")[1], startX + 48, bandY);
+          // 墨痕 (模拟笔触，绘制略宽于实际百分比的底框，覆盖真实颜色)
+          const bw = Math.max(10, b.pct) * 4;
+          ctx.fillStyle = b.col;
+          // 模拟毛糙：画多几个层叠的扁平椭圆或圆角矩形
+          ctx.beginPath();
+          ctx.roundRect(startX + 140, bandY - 12, bw, 16, 8);
+          ctx.fill();
+          ctx.fillStyle = ink;
+          ctx.fillText(b.pct + "%", startX + 150 + bw, bandY);
+          bandY += 36;
+        });
+
+        // 分隔线
+        ctx.beginPath();
+        ctx.moveTo(690, 60);
+        ctx.lineTo(690, H - 60);
+        ctx.strokeStyle = "rgba(44,36,22,0.15)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 10]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 邮政区
+        const rx = 730;
+        // 贴邮票处
+        ctx.strokeStyle = "rgba(44,36,22,0.3)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 6]);
+        ctx.strokeRect(W - 160, 60, 120, 140);
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(44,36,22,0.05)";
+        for (let i = W - 160; i < W - 40; i += 20) {
+          ctx.fillRect(i, 60, 1, 140);
+        }
+        for (let i = 60; i < 200; i += 20) {
+          ctx.fillRect(W - 160, i, 120, 1);
+        }
+        ctx.fillStyle = ink;
+        ctx.font = '300 20px "Noto Serif SC"';
+        ctx.textAlign = "center";
+        ctx.fillText("贴邮票处", W - 100, 120);
+        ctx.fillStyle = "rgba(44,36,22,0.5)";
+        ctx.font = '300 14px "DM Mono"';
+        ctx.fillText("STAMP", W - 100, 144);
+        ctx.textAlign = "left";
+
+        // 圆形邮戳
+        ctx.save();
+        const pmcx = rx + 100,
+          pmcy = 280,
+          pmr = 68;
+        ctx.translate(pmcx, pmcy);
+        ctx.rotate((-5 * Math.PI) / 180);
+        ctx.translate(-pmcx, -pmcy);
+        ctx.beginPath();
+        ctx.arc(pmcx, pmcy, pmr, 0, Math.PI * 2);
+        ctx.strokeStyle = seal;
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        ctx.fillStyle = seal;
+        ctx.textAlign = "center";
+        ctx.font = '400 36px "Zhi Mang Xing"';
+        ctx.fillText("彩构", pmcx, pmcy + 12);
+        ctx.font = '600 16px "DM Mono"';
+        ctx.fillText(DOM.pmDate.textContent, pmcx, pmcy + 40);
+        ctx.restore();
+        ctx.textAlign = "left";
+
+        // POSTCARD
+        ctx.fillStyle = ink;
+        ctx.font = '600 24px "Noto Serif SC"';
+        ctx.letterSpacing = "12px";
+        ctx.fillText("明信片 · POSTCARD", rx, 420);
+        ctx.letterSpacing = "0px";
+
+        // 地址线
+        ctx.strokeStyle = "rgba(44,36,22,0.2)";
+        ctx.lineWidth = 2;
+        [520, 600, 680, 760].forEach((y) => {
+          ctx.beginPath();
+          ctx.moveTo(rx, y);
+          ctx.lineTo(W - 40, y);
+          ctx.stroke();
+        });
+
+        // Footer Logo (背面)
+        const logoImg = document.querySelector(".brand-logo");
+        if (
+          logoImg &&
+          logoImg.complete &&
+          logoImg.naturalWidth > 0 &&
+          logoImg.style.display !== "none"
+        ) {
+          ctx.save();
+          ctx.globalCompositeOperation = "multiply";
+          ctx.globalAlpha = 0.85;
+          const lh = 36;
+          const lw = lh * (logoImg.naturalWidth / logoImg.naturalHeight);
+          ctx.drawImage(logoImg, 32, H - lh - 24, lw, lh);
+          ctx.restore();
+
+          ctx.fillStyle = "rgba(44,36,22,0.5)";
+          ctx.font = '300 16px "DM Mono"';
+          ctx.fillText("", 32 + lw + 16, H - 34);
+        } else {
+          ctx.fillStyle = "rgba(44,36,22,0.5)";
+          ctx.font = '300 16px "DM Mono"';
+          ctx.fillText("", 32, H - 34);
+        }
+
+        applyPaperTexture(ctx, W, H);
+        return cv;
+      }
+
+      function reset() {
+        colors = [];
+        flipped = false;
+        if (imgObjectURL) URL.revokeObjectURL(imgObjectURL);
+        imgObjectURL = null;
+
+        DOM.cardInner.classList.remove("flipped");
+        DOM.cardTilt.style.transform = `rotateX(0deg) rotateY(0deg)`;
+        DOM.glareFront.style.opacity = "0";
+        DOM.glareBack.style.opacity = "0";
+
+        DOM.photoBg.src = "";
+        DOM.photoBg.style.display = "none";
+        DOM.emptyState.style.display = "flex";
+        DOM.frontInfoBlock.style.display = "none";
+        DOM.frontSwatches.innerHTML = "";
+        DOM.fiPoem.innerHTML = "";
+        DOM.visRadial.innerHTML = "";
+        DOM.visStrips.innerHTML = "";
+        DOM.visBands.innerHTML = "";
+        DOM.colorChips.innerHTML = "";
+
+        ["infoSection", "colorSection", "actionSection"].forEach(
+          (id) => (DOM[id].style.display = "none"),
+        );
+        DOM.flipHint.style.display = "none";
+        DOM.flipBtnTxt.textContent = "⇄ 翻转赏鉴考证";
+        [
+          "fName",
+          "fLocation",
+          "fDynasty",
+          "fSchool",
+          "fSchoolCustom",
+          "fPoem",
+        ].forEach((id) => (DOM[id].value = ""));
+        DOM.fSchoolCustom.style.display = "none";
+        DOM.loadingRow.style.display = "none";
+        DOM.fi.value = "";
+      }
+    </script>
+  </body>
+</html>

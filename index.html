@@ -1,0 +1,1197 @@
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>彩构寻踪 · 中国古建筑色彩可视化系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- 新增：用于导出 PNG 图片的截图库 -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <link href="https://fonts.loli.net/css2?family=Noto+Serif+SC:wght@300;400;600;900&family=Zhi+Mang+Xing&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #f9f7f1; 
+        --ink: #2c2825; 
+        --ink-light: #6b635e; 
+        --border: rgba(230, 223, 209, 0.6); 
+        --red-seal: #a32b21; 
+        --red-light: rgba(163, 43, 33, 0.05);
+        --panel-bg: rgba(255, 255, 255, 0.5); 
+        --radius: 16px; 
+        --shadow: 0 8px 32px rgba(44, 40, 37, 0.03); 
+        --shadow-hover: 0 16px 48px rgba(44, 40, 37, 0.06);
+        --gold: #786B53;
+      }
+      
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        font-family: "Noto Serif SC", serif;
+        background-color: var(--bg);
+        color: var(--ink);
+        height: auto;
+        min-height: 100vh;
+        overflow-x: hidden; 
+        overflow-y: auto;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      }
+
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(107, 99, 94, 0.2); border-radius: 8px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--ink-light); }
+
+      /* ================= 背景水墨晕染 ================= */
+      .ink-blob { position: fixed; filter: blur(90px); opacity: 0.15; z-index: 0; animation: inkMorph 25s ease-in-out infinite alternate; pointer-events: none; }
+      .blob-1 { background: var(--gold); width: 600px; height: 600px; top: -10%; left: -10%; border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; opacity: 0.2; }
+      .blob-2 { background: var(--red-seal); width: 500px; height: 500px; bottom: -10%; right: 20%; border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; animation-delay: -5s; opacity: 0.08; }
+      @keyframes inkMorph {
+        0% { transform: translate(0, 0) scale(1) rotate(0deg); border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; }
+        50% { transform: translate(40px, 60px) scale(1.1) rotate(15deg); border-radius: 60% 40% 30% 70% / 50% 60% 40% 50%; }
+        100% { transform: translate(-30px, 30px) scale(0.9) rotate(-10deg); border-radius: 30% 70% 50% 50% / 60% 40% 60% 40%; }
+      }
+
+      /* ================= Bento Box 布局 ================= */
+      .dashboard-wrapper {
+        display: grid;
+        grid-template-columns: 340px 1fr 380px; 
+        grid-template-rows: auto minmax(380px, 50vh) 320px auto; 
+        grid-template-areas: 
+          "nav  head  side"
+          "wc   map   side"
+          "chat d3box side"
+          "table table table"; 
+        gap: 20px;
+        padding: 24px;
+        max-width: 100vw;
+        position: relative;
+        z-index: 1;
+      }
+
+      .panel {
+        background: var(--panel-bg); 
+        backdrop-filter: blur(16px); 
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--border); 
+        border-radius: var(--radius);
+        box-shadow: var(--shadow); 
+        padding: 20px; 
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .panel:hover { box-shadow: var(--shadow-hover); border-color: rgba(255,255,255,0.8); background: rgba(255, 255, 255, 0.65); }
+      
+      .panel-title { 
+        font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 16px; 
+        display: flex; align-items: center; gap: 8px; letter-spacing: 2px; flex-shrink: 0;
+      }
+      .panel-title::before { content: ""; width: 3px; height: 14px; background: var(--red-seal); border-radius: 2px; }
+      .panel-title span { font-size: 10px; color: var(--ink-light); letter-spacing: 1px; font-family: "Noto Serif SC", serif; font-weight: 400; text-transform: uppercase; margin-left: 4px; }
+
+      /* ================= 区域分配 ================= */
+      .area-head { 
+        grid-area: head; padding: 10px 10px 16px 10px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; 
+        background: transparent; box-shadow: none; border: none; border-bottom: 1px solid rgba(44, 40, 37, 0.08); border-radius: 0;
+      }
+      .header-brand { display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100%; width: 100%; }
+      .main-logo-img { height: 140px; width: auto; mix-blend-mode: multiply; margin-top: auto; margin-bottom: auto; object-fit: contain; }
+      .header-tagline { font-size: 13px; letter-spacing: 12px; color: var(--ink-light); font-weight: 400; opacity: 0.8; margin-bottom: 0; }
+
+      .area-nav { grid-area: nav; padding: 16px 20px; justify-content: center; }
+      #school-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; flex-shrink: 0;}
+      .school-btn {
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+        padding: 10px 0; background: rgba(255, 255, 255, 0.6);
+        border: 1px solid var(--border); border-radius: 8px; color: var(--ink);
+        font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: 1px; cursor: pointer; transition: all 0.3s;
+      }
+      .btn-dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.1); transition: 0.3s; }
+      
+      .school-btn:hover { border-color: var(--sc-color); background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transform: translateY(-2px); }
+      .school-btn.active { border-color: var(--sc-color); color: #fff; background: var(--sc-color); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+      .school-btn.active .btn-dot { border: 2px solid #fff; box-shadow: none; }
+
+      .area-wc { grid-area: wc; display: flex; flex-direction: column; }
+      #wordcloud-wrap { flex: 1; min-height: 0; background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(245,242,235,0.4) 100%); border-radius: 12px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+      #wordcloud-chart { width: 100%; height: 100%; }
+
+      .area-chat { grid-area: chat; }
+      .ai-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px; }
+      .msg { display: flex; gap: 10px; }
+      .msg.user { flex-direction: row-reverse; }
+      .msg-avatar { width: 28px; height: 28px; border: 1px solid var(--ink); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-family: "Zhi Mang Xing"; flex-shrink: 0; background: #fff; }
+      .msg.user .msg-avatar { border-color: var(--red-seal); color: var(--red-seal); }
+      .msg-bubble { max-width: 85%; padding: 8px 12px; font-size: 12px; line-height: 1.6; background: #fff; border: 1px solid var(--border); border-radius: 2px 10px 10px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.02);}
+      .msg.user .msg-bubble { background: var(--red-light); border-radius: 10px 2px 10px 10px; border-color: rgba(163,43,33,0.1); }
+      .ai-input-row { display: flex; gap: 8px; margin-top: 12px; }
+      .ai-input { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: rgba(255,255,255,0.8); outline:none; }
+      .ai-input:focus { border-color: var(--ink); }
+      .ai-send { width: 36px; background: var(--ink); color: #fff; border: none; border-radius: 6px; font-family: "Zhi Mang Xing"; font-size:14px; cursor: pointer; transition: 0.2s;}
+      .ai-send:hover { background: var(--red-seal); transform: translateY(-2px); }
+      
+      .suggested-questions { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 12px; }
+      .sq-btn {
+        background: #fff; border: 1px solid var(--border); padding: 10px 12px;
+        border-radius: 8px; font-size: 11px; color: var(--ink); cursor: pointer;
+        transition: all 0.2s; text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+      }
+      .sq-btn:hover { background: var(--red-light); border-color: rgba(163,43,33,0.25); color: var(--red-seal); transform: translateX(2px); }
+
+      .area-map { grid-area: map; padding: 0 !important; background: rgba(255,255,255,0.3); border-color: transparent;}
+      #china-map { width: 100%; height: 100%; cursor: grab; }
+      .map-controls-overlay { position: absolute; top: 16px; right: 16px; z-index: 10; }
+      .map-reset-btn { background: rgba(255, 255, 255, 0.9); backdrop-filter:blur(4px); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; font-size: 12px; cursor: pointer; font-weight: 600; letter-spacing: 1px; transition: 0.3s; }
+      .map-reset-btn:hover { background: var(--ink); color:#fff; }
+
+      .area-d3box { 
+        grid-area: d3box; display: flex; gap: 20px; padding: 0 !important; 
+        background: transparent !important; border: none !important; box-shadow: none !important; 
+      }
+      .d3-panel { flex: 1; background: var(--panel-bg); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; }
+      .svg-container { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; min-height: 0; }
+      .svg-container svg { width: 100%; height: 100%; max-height: 250px; }
+
+      /* ================= 右侧边栏：纯正数据 UI (对齐 image_d8f3a9) ================= */
+      .area-side { grid-area: side; gap: 16px; }
+      
+      #pg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; flex-shrink: 0;}
+      .sw { border-radius: 4px; overflow: hidden; border: 1px solid var(--border); background: #fff; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 6px rgba(0,0,0,0.03);}
+      .sw:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(44, 40, 37, 0.08); border-color: var(--gold); }
+      .sc2 { height: 50px; position: relative; }
+      .sc2::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 10px rgba(0,0,0,0.05); }
+      .sk {
+        position: absolute; top: 6px; left: 6px; background: rgba(255, 255, 255, 0.9); color: var(--ink);
+        font-size: 10px; font-weight: 700; padding: 2px 5px; border-radius: 3px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-family: monospace;
+      }
+      .si { padding: 8px; text-align: left; }
+      .sh { font-family: monospace; font-size: 10px; color: var(--ink-light); margin-bottom: 2px;}
+      .sn { font-size: 13px; color: var(--ink); font-weight: 500; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;}
+      .sp { font-size: 11px; color: var(--ink-light); font-family: monospace; }
+
+      #b16 { flex-shrink: 0; margin-bottom: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px;}
+      .br { display: flex; align-items: center; margin-bottom: 4px; gap: 8px; font-size: 11px; cursor: pointer; padding: 4px; border-radius: 4px;}
+      .br:hover { background: rgba(255,255,255,0.5); }
+      .bs { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05); }
+      .bl { width: 65px; color: var(--ink); flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+      .bt { flex: 1; background: rgba(0,0,0,0.05); border-radius: 3px; height: 8px; overflow: hidden; }
+      .bf { height: 100%; border-radius: 3px; transition: width 1s cubic-bezier(0.16, 1, 0.3, 1); }
+      .bp { width: 34px; color: var(--ink-light); text-align: right; font-family: monospace;}
+
+      .buildings-scroll-wrap { flex: 1; position: relative; min-height: 0; border-top: 1px dashed var(--border); margin-top: 4px;}
+      .buildings-scroll { position: absolute; inset: 0; top: 12px; overflow-y: auto; padding-right: 6px; }
+      .building-group { margin-bottom: 12px; background: rgba(255,255,255,0.6); border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
+      .building-city { font-size: 11px; color: #fff; background: var(--ink); padding: 6px 10px; font-weight: 600; letter-spacing: 1px;}
+      .building-item { padding: 10px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-size: 12px; border-bottom: 1px solid var(--border); transition: 0.2s;}
+      .building-item:hover { background: rgba(255,255,255,0.9); color: var(--red-seal); }
+      .building-item:last-child { border-bottom: none; }
+      .palette-btn { margin-left: 8px; font-size: 10px; background: var(--red-seal); color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: normal; cursor: pointer; transition: 0.2s;}
+      .palette-btn:hover { background: var(--ink); }
+      .building-toggle { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--ink-light); flex-shrink: 0; transition: all 0.3s; }
+      .building-item:hover .building-toggle { border-color: var(--red-seal); color: var(--red-seal); transform: rotate(90deg); }
+      .building-expand { display: none; padding: 16px; background: rgba(255, 255, 255, 0.8); border-bottom: 1px solid var(--border); }
+      .building-expand.open { display: block; animation: fadeIn 0.3s ease; }
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+      .building-desc { font-size: 11px; color: var(--ink-light); margin-bottom: 12px; line-height: 1.8; text-align: justify; }
+      .building-imgs { display: flex; gap: 8px; flex-wrap: wrap; }
+      .building-img { width: calc(50% - 4px); height: 70px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; transition: all 0.3s ease; }
+      .building-img:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); border-color: var(--ink-light); }
+      .no-img { width: 100%; height: 60px; border: 1px dashed var(--border); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-light); font-size: 11px; background: rgba(255,255,255,0.4); }
+      .no-buildings { color: var(--ink-light); font-size: 12px; letter-spacing: 2px; text-align: center; padding: 40px 0; opacity: 0.6; }
+
+      /* ================= 底部数据下钻区 ================= */
+      .area-table { 
+        grid-area: table; 
+        display: grid; 
+        grid-template-columns: 1fr; 
+        gap: 30px; 
+      }
+      
+      .it { width: 100%; border-collapse: collapse; font-size: 12px; }
+      .it th { background: transparent; color: var(--ink-light); font-weight: 600; padding: 12px 10px; text-align: left; border-bottom: 1px solid var(--border); border-top: 1px solid var(--border); letter-spacing: 1px; }
+      .it td { padding: 12px 10px; border-bottom: 1px dashed rgba(44,40,37,0.1); vertical-align: middle; color: var(--ink); }
+      .it tr { cursor: pointer; transition: 0.2s; }
+      .it tr:hover td { background: rgba(255,255,255,0.5); }
+      .cd { display: flex; gap: 4px; }
+      .ct2 { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); }
+      
+      /* ================= 专属报告悬浮窗 ================= */
+      .report-fab {
+        position: fixed; bottom: 40px; right: 40px; padding: 14px 24px;
+        background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border: 2px solid var(--border);
+        border-radius: 50px; color: var(--ink); font-size: 14px; font-weight: 600; letter-spacing: 2px;
+        text-decoration: none; display: flex; align-items: center; gap: 10px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 9900; opacity: 0; pointer-events: none;
+        transform: translateY(20px); transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer;
+      }
+      .report-fab.active { opacity: 1; pointer-events: auto; transform: translateY(0); }
+      .report-fab-icon { font-size: 18px; }
+
+      .report-modal {
+        position: fixed; inset: 0; z-index: 20000; background: rgba(20, 18, 16, 0.8); backdrop-filter: blur(8px);
+        display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none;
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .report-modal.open { opacity: 1; pointer-events: auto; }
+      .report-modal-content {
+        width: 90vw; height: 90vh; max-width: 1600px; background: var(--bg); border-radius: 12px;
+        display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+        transform: translateY(30px) scale(0.98); transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .report-modal.open .report-modal-content { transform: translateY(0) scale(1); }
+      
+      .report-modal-header {
+        padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;
+        background: rgba(255,255,255,0.7); backdrop-filter: blur(8px);
+      }
+      .rm-title { font-size: 18px; font-weight: 600; color: var(--ink); font-family: "Noto Serif SC", serif; letter-spacing: 2px;}
+      .rm-close { width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--ink); cursor: pointer; transition: 0.3s; }
+      .rm-close:hover { background: var(--red-seal); color: #fff; transform: rotate(90deg); }
+      .rm-body { flex: 1; position: relative; background: #fff; }
+      #report-iframe { width: 100%; height: 100%; border: none; display: block; }
+
+      /* ================= Lightbox & Tooltip ================= */
+      .lightbox { position: fixed; inset: 0; z-index: 9999; background: rgba(20, 18, 16, 0.9); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; }
+      .lightbox.open { display: flex; animation: lbIn 0.3s ease; }
+      @keyframes lbIn { from { opacity: 0; backdrop-filter: blur(0); } to { opacity: 1; backdrop-filter: blur(4px); } }
+      .lightbox img { max-width: 85vw; max-height: 85vh; border: 6px solid #fff; border-radius: 2px; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6); }
+      .lb-close { position: absolute; top: 30px; right: 40px; width: 44px; height: 44px; background: rgba(255,255,255,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; cursor: pointer; transition: all 0.3s; }
+      .lb-close:hover { background: var(--red-seal); transform: rotate(90deg); }
+
+      .dimmable { transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), filter 0.3s; }
+      body.is-highlighting .dimmable { opacity: 0.15; filter: grayscale(60%); }
+      body.is-highlighting .dimmable.highlighted { opacity: 1; filter: grayscale(0%); z-index: 10; position: relative; }
+      body.is-highlighting tr.dimmable.highlighted { background-color: rgba(255,255,255,0.9); box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+      body.is-highlighting path.rb.dimmable { opacity: 0.03; }
+      body.is-highlighting path.rb.dimmable.highlighted { opacity: 0.85; }
+
+      #d3-tt {
+        position: fixed; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px);
+        border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px;
+        font-size: 12px; color: var(--ink); pointer-events: none; opacity: 0; z-index: 10000;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); transition: opacity 0.2s; line-height: 1.6;
+      }
+      
+      .wc { height: 10px; border-radius: 5px; display: flex; margin-bottom: 12px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);}
+      .ws { transition: flex 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+      .wl { display: flex; gap: 16px; justify-content: center; font-size: 11px; color: var(--ink-light); }
+      .wd { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+      .empty-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--ink-light); font-size: 13px; letter-spacing: 2px; z-index: 2;}
+
+      /* ================= 色卡导出弹窗 ================= */
+      .card-modal {
+        position: fixed; inset: 0; z-index: 20000; background: rgba(20, 18, 16, 0.8); backdrop-filter: blur(8px);
+        display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none;
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .card-modal.open { opacity: 1; pointer-events: auto; }
+      .card-modal-content {
+        width: 400px; max-width: 90vw; background: var(--bg); border-radius: 12px;
+        display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+        transform: translateY(30px) scale(0.98); transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .card-modal.open .card-modal-content { transform: translateY(0) scale(1); }
+      
+      .card-export-area { padding: 30px; background: #fff; position: relative; } 
+      .card-actions { 
+        padding: 16px; display: flex; gap: 12px; justify-content: center; 
+        background: rgba(255,255,255,0.9); border-top: 1px solid var(--border); 
+      }
+      .card-btn { 
+        padding: 8px 20px; border: 1px solid var(--border); border-radius: 8px; background: #fff; 
+        cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink); transition: 0.3s; 
+      }
+      .card-btn:hover { background: var(--red-seal); color: #fff; border-color: var(--red-seal); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(163, 43, 33, 0.2); }
+    </style>
+  </head>
+  <body>
+    <div class="ink-blob blob-1"></div>
+    <div class="ink-blob blob-2"></div>
+    <div id="d3-tt"></div>
+    <div id="map-tooltip"><div class="tt-name" style="font-weight: 600; color: var(--red-seal); font-size: 12px;"></div></div>
+
+    <a id="report-fab" class="report-fab" href="javascript:void(0);">
+      <span class="report-fab-icon">📖</span><span id="report-fab-text">查看专属解读报告</span> <span style="font-family: monospace;">→</span>
+    </a>
+
+    <div class="report-modal" id="report-modal">
+      <div class="report-modal-content">
+        <div class="report-modal-header">
+          <div class="rm-title" id="rm-title">专属色彩解读报告</div>
+          <div class="rm-close" id="rm-close" onclick="closeReportModal()" title="关闭报告">✕</div>
+        </div>
+        <div class="rm-body">
+          <iframe id="report-iframe" src=""></iframe>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新增：色彩卡片专属弹窗 -->
+    <div class="card-modal" id="card-modal">
+      <div class="card-modal-content">
+        <div class="report-modal-header">
+          <div class="rm-title">建筑专属色卡提取</div>
+          <div class="rm-close" onclick="closeCardModal()" title="关闭窗口">✕</div>
+        </div>
+        <!-- 待截图导出的区域 -->
+        <div class="card-export-area" id="card-export-area">
+          <!-- JS 动态注入 -->
+        </div>
+        <div class="card-actions">
+          <button class="card-btn" onclick="downloadCardAsPNG()">下载为 PNG 图像</button>
+          <button class="card-btn" onclick="downloadCardAsHTML()">下载为 HTML 源码</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lightbox" id="lightbox">
+      <div class="lb-close" id="lb-close">✕</div>
+      <img id="lb-img" src="" alt="" />
+    </div>
+
+    <div class="dashboard-wrapper">
+      <header class="panel area-head">
+        <div class="header-brand">
+          <img src="logo.png" alt="彩构寻踪" class="main-logo-img" onerror="this.outerHTML='<h1 style=\'font-family:Zhi Mang Xing;font-size:48px;color:#a32b21;margin:0\'>彩构寻踪</h1>'" />
+          <div class="header-tagline">中国传统建筑色彩可视化系统</div>
+        </div>
+      </header>
+
+      <aside class="panel area-nav">
+        <div class="panel-title" style="margin-bottom: 12px;">古建流派</div>
+        <div id="school-tabs"></div>
+      </aside>
+
+      <aside class="panel area-wc">
+        <div class="panel-title">词云</div>
+        <div id="wordcloud-wrap">
+          <div id="wordcloud-chart"></div>
+          <div class="empty-state" id="wc-empty">等待注入流派数据</div>
+        </div>
+      </aside>
+
+      <aside class="panel area-chat">
+        <div class="panel-title">智能助手</div>
+        <div class="ai-messages" id="ai-messages">
+          <div class="msg ai">
+            <div class="msg-avatar">墨</div>
+            <div class="msg-bubble" style="max-width: 95%;">
+              你好我是你的古建筑智能助手，你可以尽情向我提问。<br><br>
+              <div style="font-weight: 600; margin-bottom: 8px; color: var(--ink); font-size: 13px; text-align: center;">今天想了解哪方面的知识？</div>
+              <div class="suggested-questions">
+                <button class="sq-btn" onclick="sendSuggestedMessage(this.innerText)">故宫的红墙黄瓦是怎么配色的？</button>
+                <button class="sq-btn" onclick="sendSuggestedMessage(this.innerText)">苏派建筑的粉墙黛瓦有何讲究？</button>
+                <button class="sq-btn" onclick="sendSuggestedMessage(this.innerText)">什么是中国传统的“五色”系统？</button>
+                <button class="sq-btn" onclick="sendSuggestedMessage(this.innerText)">徽派建筑为什么多用黑白两色？</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ai-input-row">
+          <input class="ai-input" id="ai-input" type="text" placeholder="输入你的问题..." />
+          <button class="ai-send" id="ai-send">问</button>
+        </div>
+      </aside>
+
+      <main class="panel area-map">
+        <div id="china-map"></div>
+        <div class="map-controls-overlay"><button class="map-reset-btn" onclick="restoreMapZoom()">[ + ] 视口居中</button></div>
+      </main>
+
+      <div class="area-d3box">
+        <section class="d3-panel">
+          <div class="panel-title" style="margin-bottom:0;" id="chord-title">色彩共现网络 (Chord)</div>
+          <div class="svg-container"><svg id="ch"></svg><div class="empty-state" id="ch-empty">选择流派以生成图谱</div></div>
+        </section>
+        <section class="d3-panel">
+          <div class="panel-title" style="margin-bottom:0;">色相与冷暖比重 (Hue)</div>
+          <div style="margin-top: 10px;" id="wcp"></div>
+          <div class="svg-container"><svg id="hd"></svg><div class="empty-state" id="hd-empty" style="margin-top: -20px;">暂无色相信源</div></div>
+        </section>
+      </div>
+
+      <!-- 右侧：纯粹的图表区，移除多余文字，动态标题 -->
+      <aside class="panel area-side">
+        <div class="panel-title" id="palette-title">色彩调色板</div>
+        <div id="pg"></div>
+        <div id="b16"></div>
+        
+        <div class="panel-title" style="margin-bottom: 8px;">名胜图录</div>
+        <div class="buildings-scroll-wrap">
+          <div class="buildings-scroll" id="buildings-list">
+            <div class="no-buildings">请先择一派系 查看各地名建筑</div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="panel area-table" style="min-height: 400px;">
+        <div style="display:flex; flex-direction:column;">
+          <div class="panel-title">色彩条目学术档案 (Color Entry Summary)</div>
+          <table class="it" id="it"></table>
+        </div>
+      </div>
+
+    </div>
+
+    <script>
+      /* ==========================================
+         核心数据与基底：拒绝造假数据，严格载入流派固有的 HTML 报告真实数据
+         ========================================== */
+      let SCHOOLS_DATA = {
+        schools: [
+          { 
+            id: "su", name: "苏派", primaryColor: "#5B8C7A", provinces: { 江苏省: { weight: 96 }, 浙江省: { weight: 75 } },
+            palette: [
+              { hex: "#F5F0E8", weight: 31, name: "粉墙白" }, { hex: "#3D3B38", weight: 18, name: "黛瓦灰" },
+              { hex: "#5D4037", weight: 15, name: "紫檀木褐" }, { hex: "#5C3A1E", weight: 10, name: "原木棕" },
+              { hex: "#9E9E9E", weight: 10, name: "苍石灰" }, { hex: "#7A6A54", weight: 6, name: "石基褐" },
+              { hex: "#C62828", weight: 5, name: "朱砂红" }, { hex: "#5B8C7A", weight: 5, name: "青绿" }
+            ],
+            chordMatrix: [[0, 1.62, 1.56, 0.90, 2.11, 0.87, 0.56, 0.79], [1.62, 0, 2.50, 1.63, 1.09, 0.87, 0.61, 0.67], [1.56, 2.50, 0, 1.41, 0.97, 0.78, 0.56, 0.57], [0.90, 1.63, 1.41, 0, 0.60, 0.49, 0.37, 0.36], [2.11, 1.09, 0.97, 0.60, 0, 0.46, 0.30, 0.41], [0.87, 0.87, 0.78, 0.49, 0.46, 0, 0.22, 0.25], [0.56, 0.61, 0.56, 0.37, 0.30, 0.22, 0, 0.15], [0.79, 0.67, 0.57, 0.36, 0.41, 0.25, 0.15, 0]],
+            hueData: [{ name: "白/灰", value: 59, color: "#F5F0E8" }, { name: "红/褐", value: 20, color: "#5D4037" }, { name: "橙/棕", value: 16, color: "#5C3A1E" }, { name: "青绿", value: 5, color: "#5B8C7A" }],
+            warmCool: { warm: 36, cool: 5, neutral: 59 },
+            tableData: [{name:"粉墙白",hex:"#F5F0E8",warm:35,cool:35,complexity:92,richness:86.5}, {name:"黛瓦灰",hex:"#3D3B38",warm:35,cool:35,complexity:66,richness:67}, {name:"紫檀木褐",hex:"#5D4037",warm:75,cool:10,complexity:60,richness:62.5}, {name:"原木棕",hex:"#5C3A1E",warm:75,cool:10,complexity:50,richness:55}, {name:"苍石灰",hex:"#9E9E9E",warm:35,cool:35,complexity:50,richness:55}, {name:"石基褐",hex:"#7A6A54",warm:75,cool:10,complexity:42,richness:49}, {name:"朱砂红",hex:"#C62828",warm:75,cool:10,complexity:40,richness:47.5}, {name:"青绿",hex:"#5B8C7A",warm:10,cool:75,complexity:40,richness:47.5}]
+          },
+          { 
+            id: "wan", name: "皖派", primaryColor: "#2c2825", provinces: { 安徽省: { weight: 95 }, 江西省: { weight: 75 } },
+            palette: [
+              {hex: "#8D8C8C", weight: 29.85, name: "徽灰"}, {hex: "#DEDCE0", weight: 22.39, name: "云霭白"},
+              {hex: "#2F3637", weight: 19.40, name: "玄青"}, {hex: "#9D9D97", weight: 17.91, name: "墨砚青"},
+              {hex: "#5D4E35", weight: 4.48, name: "栗壳褐"}, {hex: "#746342", weight: 2.99, name: "苍莨褐"},
+              {hex: "#A18F77", weight: 1.49, name: "秋芦黄"}, {hex: "#C8372A", weight: 1.49, name: "朱红"}
+            ],
+            chordMatrix: [[0,4.54,3.78,5.03,0.98,0.71,0.42,0.30],[4.54,0,1.44,2.95,0.42,0.33,0.23,0.15],[3.78,1.44,0,2.07,0.77,0.47,0.19,0.19],[5.03,2.95,2.07,0,0.55,0.40,0.25,0.17],[0.98,0.42,0.77,0.55,0,0.12,0.05,0.05],[0.71,0.33,0.47,0.40,0.12,0,0.04,0.03],[0.42,0.23,0.19,0.25,0.05,0.04,0,0.02],[0.30,0.15,0.19,0.17,0.05,0.03,0.02,0]],
+            hueData: [{name:"白/灰",value:89.55,color:"#8D8C8C"},{name:"黄",value:7.46,color:"#5D4E35"},{name:"橙",value:1.49,color:"#A18F77"},{name:"红",value:1.49,color:"#C8372A"}],
+            warmCool: { warm: 10.4, cool: 0, neutral: 89.6 },
+            tableData: [{name:"徽灰",hex:"#8D8C8C",warm:35,cool:35,complexity:89.7,richness:84.8},{name:"云霭白",hex:"#DEDCE0",warm:35,cool:35,complexity:74.8,richness:73.6},{name:"玄青",hex:"#2F3637",warm:35,cool:35,complexity:68.8,richness:69.1},{name:"墨砚青",hex:"#9D9D97",warm:35,cool:35,complexity:65.8,richness:66.9},{name:"栗壳褐",hex:"#5D4E35",warm:75,cool:10,complexity:39,richness:46.7},{name:"苍莨褐",hex:"#746342",warm:75,cool:10,complexity:36,richness:44.5},{name:"秋芦黄",hex:"#A18F77",warm:75,cool:10,complexity:33,richness:42.2},{name:"朱红",hex:"#C8372A",warm:75,cool:10,complexity:33,richness:42.2}]
+          },
+          { 
+            id: "jing", name: "京派", primaryColor: "#a32b21", provinces: { 北京市: { weight: 98 }, 河北省: { weight: 65 } },
+            palette: [
+              { hex:"#C0391A", weight: 34.6, name:"朱红" }, { hex:"#D4A017", weight: 24.7, name:"明黄" },
+              { hex:"#3A6B8A", weight: 11.8, name:"孔雀蓝" }, { hex:"#2E6B4F", weight: 9.9, name:"翡翠绿" },
+              { hex:"#F5F0E8", weight: 7.9, name:"汉白玉白" }, { hex:"#8B6A14", weight: 5.2, name:"鎏金褐" },
+              { hex:"#2A2420", weight: 4.1, name:"油烟黑" }, { hex:"#A03010", weight: 1.8, name:"暗朱" }
+            ],
+            chordMatrix: [[0, 3.5, 1.2, 0.8, 0.5, 0.4, 0.3, 0.1], [3.5, 0, 1.0, 0.7, 0.4, 0.3, 0.2, 0.1], [1.2, 1.0, 0, 0.5, 0.3, 0.2, 0.1, 0.1], [0.8, 0.7, 0.5, 0, 0.2, 0.1, 0.1, 0.1], [0.5, 0.4, 0.3, 0.2, 0, 0.1, 0.1, 0.1], [0.4, 0.3, 0.2, 0.1, 0.1, 0, 0.1, 0.1], [0.3, 0.2, 0.1, 0.1, 0.1, 0.1, 0, 0.1], [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0]],
+            hueData: [{name:"红",value:36.4,color:"#C0391A"},{name:"黄",value:29.9,color:"#D4A017"},{name:"青绿",value:21.7,color:"#3A6B8A"},{name:"白/黑",value:12,color:"#F5F0E8"}],
+            warmCool: { warm: 66.3, cool: 21.7, neutral: 12 },
+            tableData: [{name:"朱红",hex:"#C0391A",warm:80,cool:5,complexity:80,richness:85},{name:"明黄",hex:"#D4A017",warm:80,cool:5,complexity:75,richness:80},{name:"孔雀蓝",hex:"#3A6B8A",warm:10,cool:80,complexity:70,richness:75},{name:"翡翠绿",hex:"#2E6B4F",warm:10,cool:80,complexity:65,richness:70},{name:"汉白玉白",hex:"#F5F0E8",warm:30,cool:30,complexity:50,richness:55},{name:"鎏金褐",hex:"#8B6A14",warm:70,cool:10,complexity:45,richness:50},{name:"油烟黑",hex:"#2A2420",warm:30,cool:30,complexity:40,richness:45},{name:"暗朱",hex:"#A03010",warm:80,cool:5,complexity:35,richness:40}]
+          },
+          { 
+            id: "jin", name: "晋派", primaryColor: "#7A6A54", provinces: { 山西省: { weight: 96 }, 陕西省: { weight: 70 } },
+            palette: [
+              { hex: "#4A4F52", weight: 36, name: "瓦灰" }, { hex: "#4E342E", weight: 25, name: "原木深褐" },
+              { hex: "#008B8B", weight: 12, name: "孔雀蓝绿" }, { hex: "#D2691E", weight: 8, name: "赭石橙黄" },
+              { hex: "#8B0000", weight: 5, name: "朱砂暗红" }, { hex: "#F5F5DC", weight: 4, name: "石灰米白" },
+              { hex: "#FFD700", weight: 3, name: "鎏金" }, { hex: "#4682B4", weight: 3, name: "石青深蓝" },
+              { hex: "#2F2F2F", weight: 2, name: "墨黑" }, { hex: "#556B2F", weight: 2, name: "苍绿" }
+            ],
+            chordMatrix: [[0, 8.07, 3.23, 1.91, 1.26, 0.54, 0.49, 0.8, 0.63, 0.64], [8.07, 0, 1.98, 1.35, 0.98, 0.29, 0.33, 0.48, 0.46, 0.43], [3.23, 1.98, 0, 0.43, 0.27, 0.17, 0.11, 0.29, 0.16, 0.16], [1.91, 1.35, 0.43, 0, 0.28, 0.14, 0.17, 0.12, 0.09, 0.11], [1.26, 0.98, 0.27, 0.28, 0, 0.04, 0.06, 0.07, 0.07, 0.07], [0.54, 0.29, 0.17, 0.14, 0.04, 0, 0.05, 0.06, 0.02, 0.03], [0.49, 0.33, 0.11, 0.17, 0.06, 0.05, 0, 0.03, 0.02, 0.03], [0.8, 0.48, 0.29, 0.12, 0.07, 0.06, 0.03, 0, 0.03, 0.04], [0.63, 0.46, 0.16, 0.09, 0.07, 0.02, 0.02, 0.03, 0, 0.03], [0.64, 0.43, 0.16, 0.11, 0.07, 0.03, 0.03, 0.04, 0.03, 0]],
+            hueData: [{ name: "白/灰", value: 42, color: "#4A4F52" }, { name: "红", value: 30, color: "#4E342E" }, { name: "青", value: 12, color: "#008B8B" }, { name: "橙", value: 8, color: "#D2691E" }, { name: "黄", value: 3, color: "#FFD700" }, { name: "蓝", value: 3, color: "#4682B4" }, { name: "绿", value: 2, color: "#556B2F" }],
+            warmCool: { warm: 41, cool: 15, neutral: 44 },
+            tableData: [{name:"瓦灰",hex:"#4A4F52",warm:35,cool:35,complexity:102,richness:94},{name:"原木深褐",hex:"#4E342E",warm:75,cool:10,complexity:80,richness:77.5},{name:"孔雀蓝绿",hex:"#008B8B",warm:10,cool:75,complexity:54,richness:58},{name:"赭石橙黄",hex:"#D2691E",warm:75,cool:10,complexity:46,richness:52},{name:"朱砂暗红",hex:"#8B0000",warm:75,cool:10,complexity:40,richness:47.5},{name:"石灰米白",hex:"#F5F5DC",warm:35,cool:35,complexity:38,richness:46},{name:"鎏金",hex:"#FFD700",warm:75,cool:10,complexity:36,richness:44.5},{name:"石青深蓝",hex:"#4682B4",warm:10,cool:75,complexity:36,richness:44.5},{name:"墨黑",hex:"#2F2F2F",warm:35,cool:35,complexity:34,richness:43},{name:"苍绿",hex:"#556B2F",warm:35,cool:35,complexity:34,richness:43}]
+          },
+          { 
+            id: "min", name: "闽派", primaryColor: "#C03818", provinces: { 福建省: { weight: 97 }, 广东省: { weight: 65 } },
+            palette: [
+              {hex: "#C4A57B", weight: 35, name: "夯土赭黄"}, {hex: "#56585A", weight: 20, name: "青黛瓦灰"},
+              {hex: "#B23A2E", weight: 20, name: "朱红"}, {hex: "#D3D3D3", weight: 15, name: "灰白"},
+              {hex: "#3E2725", weight: 10, name: "深邃木褐"}
+            ],
+            chordMatrix: [[0,4.81,4.89,4.05,1.89],[4.81,0,3.04,1.55,1.66],[4.89,3.04,0,1.45,1.47],[4.05,1.55,1.45,0,0.53],[1.89,1.66,1.47,0.53,0]],
+            hueData: [{name:"橙",value:35,color:"#C4A57B"},{name:"白/灰",value:35,color:"#56585A"},{name:"红",value:30,color:"#B23A2E"}],
+            warmCool: { warm: 65, cool: 0, neutral: 35 },
+            tableData: [{name:"夯土赭黄",hex:"#C4A57B",warm:75,cool:10,complexity:100,richness:92.5},{name:"青黛瓦灰",hex:"#56585A",warm:35,cool:35,complexity:70,richness:70},{name:"朱红",hex:"#B23A2E",warm:75,cool:10,complexity:70,richness:70},{name:"灰白",hex:"#D3D3D3",warm:35,cool:35,complexity:60,richness:62.5},{name:"深邃木褐",hex:"#3E2725",warm:75,cool:10,complexity:50,richness:55}]
+          },
+          { 
+            id: "chuan", name: "川派", primaryColor: "#786B53", provinces: { 四川省: { weight: 98 }, 重庆市: { weight: 95 } },
+            palette: [
+              { hex: "#6B4226", weight: 35, name: "穿斗褐" }, { hex: "#556B2F", weight: 25, name: "竹编绿" },
+              { hex: "#808080", weight: 18, name: "瓦顶灰" }, { hex: "#DEB887", weight: 10, name: "夹泥黄" },
+              { hex: "#F5F5DC", weight: 8, name: "石灰白" }, { hex: "#8B0000", weight: 4, name: "点金红" }
+            ],
+            chordMatrix: [[0, 2.5, 1.8, 1.0, 0.8, 0.4], [2.5, 0, 1.5, 0.8, 0.6, 0.3], [1.8, 1.5, 0, 0.6, 0.5, 0.2], [1.0, 0.8, 0.6, 0, 0.4, 0.2], [0.8, 0.6, 0.5, 0.4, 0, 0.1], [0.4, 0.3, 0.2, 0.2, 0.1, 0]],
+            hueData: [{name:"褐/黄",value:45,color:"#6B4226"},{name:"绿",value:25,color:"#556B2F"},{name:"灰/白",value:26,color:"#808080"},{name:"红",value:4,color:"#8B0000"}],
+            warmCool: { warm: 49, cool: 25, neutral: 26 },
+            tableData: [{name:"穿斗褐",hex:"#6B4226",warm:75,cool:10,complexity:80,richness:75},{name:"竹编绿",hex:"#556B2F",warm:15,cool:70,complexity:75,richness:70},{name:"瓦顶灰",hex:"#808080",warm:35,cool:35,complexity:60,richness:65},{name:"夹泥黄",hex:"#DEB887",warm:70,cool:15,complexity:55,richness:60},{name:"石灰白",hex:"#F5F5DC",warm:35,cool:35,complexity:45,richness:50},{name:"点金红",hex:"#8B0000",warm:80,cool:5,complexity:40,richness:45}]
+          }
+        ]
+      };
+      
+      let WORDCLOUD_DATA = {}; 
+      let BUILDINGS_DATA = {};
+
+      /* ==========================================
+         智能助手 (Qwen AI API) 配置及状态
+         ========================================== */
+      let activeSchoolName = "全局地图";
+      let aiConversationHistory = []; 
+      const DASH_SCOPE_API_KEY = "sk-d130dbce417b4bdeb14e90d21b9e1be8"; 
+      const DASH_SCOPE_ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+      
+      /* D3 通用工具与交互 */
+      function h2r(h) { h = h.replace("#", ""); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+      function bl(a, b, t=0.5) { var x = h2r(a), y = h2r(b); return "#" + [0, 1, 2].map(i => Math.round(x[i] * (1 - t) + y[i] * t).toString(16).padStart(2, "0")).join(""); }
+      
+      const TT = document.getElementById("d3-tt");
+      function st(e, html) { TT.innerHTML = html; TT.style.opacity = 1; mv(e); }
+      function mv(e) { let x = e.clientX + 16, y = e.clientY + 16; if (x + 180 > window.innerWidth) x = e.clientX - 200; TT.style.transform = `translate(${x}px, ${y}px)`; }
+      function ht() { TT.style.opacity = 0; }
+
+      function highlightData(hex1, hex2 = null) {
+        document.body.classList.add("is-highlighting");
+        document.querySelectorAll(".dimmable").forEach(el => {
+          const h = el.dataset.hex, src = el.dataset.hexSource, tgt = el.dataset.hexTarget;
+          if (src && tgt) el.classList.toggle("highlighted", src === hex1 || tgt === hex1 || (hex2 && (src === hex2 || tgt === hex2)));
+          else el.classList.toggle("highlighted", h === hex1 || h === hex2);
+        });
+      }
+      function resetHighlight() { document.body.classList.remove("is-highlighting"); document.querySelectorAll(".highlighted").forEach(el => el.classList.remove("highlighted")); }
+
+      /* ==========================================
+         数据解析与获取
+         ========================================== */
+      function normalizeProvinceName(name) {
+        if (!name) return "";
+        const specialMap = { 内蒙古: "内蒙古自治区", 新疆: "新疆维吾尔自治区", 广西: "广西壮族自治区", 宁夏: "宁夏回族自治区", 西藏: "西藏自治区", 香港: "香港特别行政区", 澳门: "澳门特别行政区", 北京: "北京市", 天津: "天津市", 上海: "上海市", 重庆: "重庆市" };
+        if (specialMap[name]) return specialMap[name];
+        if (name.endsWith("省") || name.endsWith("市") || name.endsWith("自治区") || name.endsWith("行政区")) return name;
+        return name + "省";
+      }
+
+      function normalizeAllData() {
+        if (BUILDINGS_DATA) { Object.keys(BUILDINGS_DATA).forEach((schoolId) => { const norm = {}; Object.entries(BUILDINGS_DATA[schoolId]).forEach(([provRaw, cData]) => { norm[normalizeProvinceName(provRaw)] = cData; }); BUILDINGS_DATA[schoolId] = norm; }); }
+      }
+
+      async function tryJSON(url) { try { const r = await fetch(url); return r.ok ? await r.json() : null; } catch (e) { return null; } }
+      
+      async function loadExternalData() {
+        const [wc, bld] = await Promise.all([
+          tryJSON("data/worldcloud/wordcloud_data.json"), 
+          tryJSON("data/buildings/buildings_data.json")
+        ]);
+        if (wc) WORDCLOUD_DATA = wc; 
+        if (bld && typeof bld === "object" && !Array.isArray(bld) && Object.keys(bld).length > 0) BUILDINGS_DATA = bld; 
+      }
+
+      /* ==========================================
+         严格的图表渲染逻辑
+         ========================================== */
+      function renderPaletteAndBars(palette) {
+        const pg = document.getElementById("pg"), b16 = document.getElementById("b16");
+        pg.innerHTML = ""; b16.innerHTML = "";
+        
+        document.getElementById("palette-title").innerHTML = `色彩调色板 <span>TOP ${palette.length} 主色调（悬停交互）</span>`;
+
+        const maxW = Math.max(...palette.map(d=>d.weight));
+
+        palette.forEach((c) => {
+          let sw = document.createElement("div"); sw.className = "sw dimmable"; sw.dataset.hex = c.hex;
+          sw.onmouseenter = () => highlightData(c.hex); sw.onmouseleave = resetHighlight;
+          sw.innerHTML = `
+            <div class="sc2" style="background:${c.hex}">
+              <div class="sk">#${c.rank}</div>
+            </div>
+            <div class="si">
+              <div class="sh">${c.hex}</div>
+              <div class="sn" title="${c.name}">${c.name}</div>
+              <div class="sp">${c.weight.toFixed(2)}%</div>
+            </div>`;
+          pg.appendChild(sw);
+
+          let br = document.createElement("div"); br.className = "br dimmable"; br.dataset.hex = c.hex;
+          br.onmouseenter = () => highlightData(c.hex); br.onmouseleave = resetHighlight;
+          let p = (c.weight / maxW) * 100;
+          br.innerHTML = `
+            <div class="bs" style="background:${c.hex}"></div>
+            <div class="bl" title="${c.name}">${c.name}<span style="color:var(--ink-light);font-size:10px;margin-left:4px;font-family:monospace">${c.hex}</span></div>
+            <div class="bt"><div class="bf" style="width:${p}%; background:${c.hex};box-shadow:inset 0 0 4px rgba(0,0,0,0.1)"></div></div>
+            <div class="bp">${c.weight.toFixed(2)}%</div>`;
+          b16.appendChild(br);
+        });
+      }
+
+      function renderHue(dhData) {
+        document.getElementById("hd-empty").style.display = "none";
+        d3.select("#hd").selectAll("*").remove();
+        const svg = d3.select("#hd").attr("viewBox", "-150 -150 300 300").attr("preserveAspectRatio", "xMidYMid meet");
+        
+        const pie = d3.pie().value(d => d.value).sort(null).padAngle(0.02);
+        const arc = d3.arc().innerRadius(70).outerRadius(130), ah = d3.arc().innerRadius(70).outerRadius(140);
+        
+        svg.selectAll("path").data(pie(dhData)).join("path")
+          .attr("class", "dimmable").attr("data-hex", d => d.data.color)
+          .attr("d", arc).attr("fill", d => d.data.color).attr("stroke", "#fff").attr("stroke-width", 2)
+          .on("mouseover", function(e, d) {
+            d3.select(this).transition().duration(200).attr("d", ah);
+            highlightData(d.data.color);
+            st(e, `<div style="font-weight:bold; margin-bottom:4px;">${d.data.name}</div><div style="color:var(--ink-light)">${d.data.value.toFixed(1)}% 面积比重</div>`);
+          }).on("mousemove", mv).on("mouseout", function() {
+            d3.select(this).transition().duration(200).attr("d", arc);
+            resetHighlight(); ht();
+          });
+      }
+
+      function renderWarmCool(dwData) {
+        let warm = dwData.warm; let cool = dwData.cool; let neutral = dwData.neutral;
+        document.getElementById("wcp").innerHTML = `
+          <div class="wc">
+            <div class="ws" style="background:#c26b3a;flex:${warm}"></div>
+            <div class="ws" style="background:#5b8c7a;flex:${cool}"></div>
+            <div class="ws" style="background:#6b6560;flex:${neutral}"></div>
+          </div>
+          <div class="wl">
+            <div><span class="wd" style="background:#c26b3a"></span>暖色系 ${warm}%</div>
+            <div><span class="wd" style="background:#5b8c7a"></span>冷色系 ${cool}%</div>
+            <div><span class="wd" style="background:#6b6560"></span>中性系 ${neutral}%</div>
+          </div>`;
+      }
+
+      function renderChord(palette, dmMatrix) {
+        document.getElementById("ch-empty").style.display = "none";
+        document.getElementById("chord-title").innerHTML = `色彩共现网络 <span>TOP ${palette.length} · Chord Diagram</span>`;
+        d3.select("#ch").selectAll("*").remove();
+        const svg = d3.select("#ch").attr("viewBox", "-200 -200 400 400").attr("preserveAspectRatio", "xMidYMid meet");
+        const ch = d3.chord().padAngle(0.04).sortSubgroups(d3.descending).sortChords(d3.descending);
+        const chs = ch(dmMatrix);
+        const arc = d3.arc().innerRadius(145).outerRadius(160), rib = d3.ribbon().radius(143);
+        
+        svg.selectAll(".rb").data(chs).join("path")
+          .attr("class", "rb dimmable").attr("data-hex-source", d => palette[d.source.index].hex).attr("data-hex-target", d => palette[d.target.index].hex)
+          .attr("d", rib).attr("fill", d => bl(palette[d.source.index].hex, palette[d.target.index].hex)).attr("stroke", "none")
+          .on("mouseover", function(e, d) {
+            let s = palette[d.source.index], t = palette[d.target.index];
+            highlightData(s.hex, t.hex); 
+            st(e, `<div style="display:flex; align-items:center; gap:8px;"><span style="color:${s.hex}">●</span> ${s.name} <br/> <span style="color:${t.hex}">●</span> ${t.name}</div>`);
+          }).on("mousemove", mv).on("mouseout", function() { resetHighlight(); ht(); });
+          
+        const grp = svg.selectAll(".gp").data(chs.groups).join("g").attr("class", "gp dimmable").attr("data-hex", d => palette[d.index].hex);
+        grp.append("path").attr("d", arc).attr("fill", d => palette[d.index].hex).attr("stroke", "#fff").attr("stroke-width", 1.5)
+          .on("mouseover", function(e, d) {
+            highlightData(palette[d.index].hex);
+            st(e, `<div style="font-weight:bold; margin-bottom:4px;">${palette[d.index].name}</div><div style="color:var(--ink-light)">链接权重: ${d.value.toFixed(2)}</div>`);
+          }).on("mousemove", mv).on("mouseout", function() { resetHighlight(); ht(); });
+      }
+
+      function renderTable(tableData) {
+        const t = document.getElementById("it");
+        t.innerHTML = "<thead><tr><th>标准色名 (Name)</th><th>色号 (Hex)</th><th>暖色成分</th><th>冷色成分</th><th>色彩复杂度</th><th>层次丰富度</th></tr></thead>";
+        const tb = document.createElement("tbody");
+        
+        tableData.forEach(img => {
+          let subDot = d3.color(img.hex).brighter(0.5).formatHex();
+          const dots = `<div class="ct2" style="background:${img.hex}"></div><div class="ct2" style="background:${subDot}"></div>`;
+          const tr = document.createElement("tr");
+          tr.className = "color-row dimmable";
+          tr.dataset.hex = img.hex;
+          tr.onmouseenter = () => highlightData(img.hex);
+          tr.onmouseleave = resetHighlight;
+
+          tr.innerHTML = `
+            <td style="font-weight:600; color:var(--ink);">${img.name}</td>
+            <td><div style="display:flex;align-items:center;gap:8px"><div class="cd">${dots}</div><span style="font-family:monospace">${img.hex}</span></div></td>
+            <td style="color:#a32b21">${img.warm}%</td>
+            <td style="color:#5b8c7a">${img.cool}%</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="background:var(--panel-bg);border-radius:3px;height:8px;width:70px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,0.05)">
+                  <div style="width:${img.complexity}%;height:100%;background:var(--ink-light);"></div>
+                </div>
+                <span style="font-size:11px;color:var(--ink-light);font-family:monospace">${img.complexity}%</span>
+              </div>
+            </td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="background:var(--panel-bg);border-radius:3px;height:8px;width:70px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,0.05)">
+                  <div style="width:${img.richness}%;height:100%;background:var(--gold);"></div>
+                </div>
+                <span style="font-size:11px;color:var(--ink-light);font-family:monospace">${img.richness}%</span>
+              </div>
+            </td>`;
+          tb.appendChild(tr);
+        });
+        t.appendChild(tb);
+      }
+
+      function updateDashboardCharts(school) {
+        let palette = school.palette.map((c, idx) => ({ ...c, rank: idx + 1 }));
+        
+        renderPaletteAndBars(palette);
+        renderHue(school.hueData);
+        renderWarmCool(school.warmCool);
+        renderChord(palette, school.chordMatrix); 
+        renderTable(school.tableData);
+      }
+
+      /* ==========================================
+         名胜图录
+         ========================================== */
+      function renderBuildings(schoolId) {
+        const el = document.getElementById("buildings-list"); 
+        const schoolData = BUILDINGS_DATA[schoolId]; 
+        
+        if (!schoolData) { 
+          el.innerHTML = '<div class="no-buildings">该派系暂无建筑数据</div>'; 
+          return; 
+        }
+        
+        let html = ""; 
+        Object.entries(schoolData).forEach(([province, citiesOrArr]) => { 
+          const firstVal = !Array.isArray(citiesOrArr) && typeof citiesOrArr === "object" ? Object.values(citiesOrArr)[0] : null; 
+          const isThreeLayer = firstVal !== null && Array.isArray(firstVal); 
+          const cityMap = isThreeLayer ? citiesOrArr : { [province]: citiesOrArr };
+          
+          Object.entries(cityMap).forEach(([city, buildings]) => { 
+            const list = Array.isArray(buildings) ? buildings : buildings.buildings || []; 
+            if (!list || !list.length) return; 
+            const displayProvince = province.replace(/[省市自治区]$/, ""); 
+            const cityLabel = isThreeLayer ? `<span style="color:rgba(255,255,255,0.7);font-size:11px;margin-right:4px;">${displayProvince}</span><span style="color:rgba(255,255,255,0.4);margin-right:4px;">|</span>${city}` : city; 
+            
+            html += `<div class="building-group"><div class="building-city">${cityLabel}</div>`;
+            
+            list.forEach((b, i) => { 
+              const key = ("b_" + schoolId + "_" + province + "_" + city + "_" + i).replace(/[\s()（）]/g, "_"); 
+              const imgs = b.images && b.images.length ? b.images.map((src) => `<img class="building-img" src="${src}" alt="${b.name}" loading="lazy" onerror="this.style.display='none'" onclick="openLightbox('${src}')">`).join("") : '<div class="no-img">暂无图片</div>'; 
+              
+              html += `
+                <div class="building-item" onclick="toggleBuilding('${key}')">
+                  <span class="building-name" style="display:flex; align-items:center; gap:8px;">${b.name}
+                    <span class="palette-btn" onclick="askAboutBuilding('${b.name}'); event.stopPropagation();" title="点击向助手提问">色卡</span>
+                  </span>
+                  <span class="building-toggle" id="toggle_${key}">＋</span>
+                </div>
+                <div class="building-expand" id="expand_${key}">
+                  <div class="building-desc">${b.desc}</div>
+                  <div class="building-imgs">${imgs}</div>
+                </div>`; 
+            }); 
+            html += "</div>"; 
+          }); 
+        }); 
+        el.innerHTML = html || '<div class="no-buildings">该派系暂无建筑数据</div>';
+      }
+
+      function toggleBuilding(key) { 
+        const exp = document.getElementById("expand_" + key); 
+        const tog = document.getElementById("toggle_" + key); 
+        if (!exp) return; 
+        const isOpen = exp.classList.toggle("open"); 
+        tog.textContent = isOpen ? "－" : "＋"; 
+        tog.style.transform = isOpen ? "rotate(180deg)" : "rotate(0)"; 
+      }
+
+      /* ==========================================
+         古建助手 (AI 对接核心功能及色卡渲染)
+         ========================================== */
+      let msgCounter = 0; 
+      function appendMsg(role, content) { 
+        const id = "msg_" + ++msgCounter; 
+        const el = document.getElementById("ai-messages"); 
+        el.innerHTML += `<div class="msg ${role}" id="${id}"><div class="msg-avatar">${role === "ai" ? "墨" : "客"}</div><div class="msg-bubble">${content}</div></div>`; 
+        el.scrollTop = el.scrollHeight; 
+        return id; 
+      }
+      
+      function updateMsg(id, content) { 
+        const el = document.getElementById(id); 
+        if (el) el.querySelector(".msg-bubble").innerHTML = content; 
+        document.getElementById("ai-messages").scrollTop = 99999; 
+      }
+
+      function renderPaletteMsg(buildingName, palette) {
+        let html = `<div style="margin-bottom: 8px;">根据影像资料与流派特征，<b>${buildingName}</b> 的主要专属色卡如下：</div>`;
+        html += `<div style="display:flex; flex-direction:column; gap:6px;">`;
+        palette.slice(0, 5).forEach((c) => {
+          html += `
+            <div style="display:flex; align-items:center; gap:8px; padding:6px; background:rgba(255,255,255,0.8); border:1px solid var(--border); border-radius:6px;">
+              <div style="width:24px; height:24px; border-radius:4px; box-shadow:inset 0 0 4px rgba(0,0,0,0.1); background:${c.hex}"></div>
+              <div style="flex:1;">
+                <div style="font-size:12px; font-weight:600; color:var(--ink);">${c.name}</div>
+                <div style="font-size:10px; color:var(--ink-light); font-family:monospace;">${c.hex}</div>
+              </div>
+              <div style="font-size:11px; color:var(--ink-light);">${c.weight ? c.weight.toFixed(1) + '%' : ''}</div>
+            </div>`;
+        });
+        html += `</div><div style="margin-top:8px; font-size:11px; color:var(--ink-light);">* 已为您提取该建筑最具代表性的前5种核心色彩，同时您可以在弹出的面板中进行下载保存。</div>`;
+        return html;
+      }
+
+      // 【核心功能恢复+升级】处理建筑快捷提问 (在聊天框和弹窗中同时渲染色卡)
+      function askAboutBuilding(buildingName) {
+        // 在对话框里显示用户发出的指令
+        appendMsg("user", `提取“${buildingName}”的建筑色卡`);
+        const tid = appendMsg("ai", '<span style="color:var(--ink-light);font-size:12px;">⏳ 正在分析影像色彩数据...</span>');
+
+        // 模拟延迟后直接通过内部逻辑渲染色卡 UI
+        setTimeout(() => {
+          // 找到当前浏览的派系调色板数据作为色卡来源 
+          const currentSchool = SCHOOLS_DATA.schools.find(s => s.name === activeSchoolName);
+          const palette = currentSchool ? currentSchool.palette : SCHOOLS_DATA.schools[0].palette;
+          
+          updateMsg(tid, renderPaletteMsg(buildingName, palette));
+          
+          // 【新增功能】打开独立色卡弹窗
+          openCardModal(buildingName, palette);
+        }, 600);
+      }
+
+      /* ==========================================
+         新增：独立色卡弹窗与导出逻辑
+         ========================================== */
+      let currentCardTitle = "建筑色卡";
+
+      // 渲染并打开弹窗
+      function openCardModal(buildingName, palette) {
+        currentCardTitle = buildingName;
+        
+        // 构建用于高清展示与导出的高保真 HTML
+        let html = `
+          <div style="text-align:center; margin-bottom: 24px;">
+            <h2 style="margin:0 0 8px 0; font-family:'Noto Serif SC', serif; font-size:24px; color:var(--ink);">${buildingName}</h2>
+            <div style="font-size:12px; color:var(--ink-light); letter-spacing:2px;">TOP 5 核心色彩基因库</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:12px;">`;
+        
+        palette.slice(0, 5).forEach((c) => {
+          html += `
+            <div style="display:flex; align-items:center; gap:16px; padding:12px 16px; background:var(--bg); border:1px solid var(--border); border-radius:8px;">
+              <div style="width:48px; height:48px; border-radius:6px; box-shadow:inset 0 0 8px rgba(0,0,0,0.1); background:${c.hex}"></div>
+              <div style="flex:1;">
+                <div style="font-size:16px; font-weight:600; color:var(--ink); margin-bottom:2px;">${c.name}</div>
+                <div style="font-size:13px; color:var(--ink-light); font-family:monospace;">HEX: ${c.hex}</div>
+              </div>
+              <div style="font-size:15px; font-weight:bold; color:var(--ink-light);">${c.weight ? c.weight.toFixed(1) + '%' : ''}</div>
+            </div>`;
+        });
+        
+        html += `</div>
+          <div style="margin-top:20px; border-top:1px dashed var(--border); padding-top:16px; display:flex; justify-content:space-between; align-items:center;">
+             <span style="font-size:10px; color:var(--ink-light);">Powered by 彩构寻踪引擎</span>
+             <span style="font-size:10px; color:var(--ink-light); font-family:monospace;">${new Date().toLocaleDateString()}</span>
+          </div>`;
+        
+        document.getElementById('card-export-area').innerHTML = html;
+        document.getElementById('card-modal').classList.add('open');
+      }
+
+      function closeCardModal() { document.getElementById('card-modal').classList.remove('open'); }
+      
+      // 点击背景遮罩关闭弹窗
+      document.getElementById("card-modal").onclick = (e) => { 
+        if (e.target === document.getElementById("card-modal")) closeCardModal(); 
+      };
+
+      // 导出为 PNG 功能
+      function downloadCardAsPNG() {
+        const exportArea = document.getElementById('card-export-area');
+        // 使用 html2canvas 将 DOM 转为 Canvas，scale: 2 保证高清输出
+        html2canvas(exportArea, { backgroundColor: '#ffffff', scale: 2 }).then(canvas => {
+          const link = document.createElement('a');
+          link.download = `${currentCardTitle}-色彩档案.png`;
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+        });
+      }
+
+      // 导出为独立 HTML 功能
+      function downloadCardAsHTML() {
+        const exportArea = document.getElementById('card-export-area').innerHTML;
+        // 构建独立的离线 HTML 模板
+        const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+          <meta charset="UTF-8">
+          <title>${currentCardTitle} - 色彩档案<\/title>
+          <link href="https://fonts.loli.net/css2?family=Noto+Serif+SC:wght@300;400;600;900&display=swap" rel="stylesheet" />
+          <style>
+            :root { --bg: #f9f7f1; --ink: #2c2825; --ink-light: #6b635e; --border: rgba(230, 223, 209, 0.6); }
+            * { box-sizing: border-box; }
+            body { font-family: 'Noto Serif SC', serif; background-color: #f0ebe1; display: flex; justify-content: center; padding: 40px 20px; margin: 0; }
+            .card-container { width: 400px; max-width: 100%; background: #fff; padding: 30px; border-radius: 16px; box-shadow: 0 16px 48px rgba(44, 40, 37, 0.08); border: 1px solid var(--border); }
+          <\/style>
+        <\/head>
+        <body>
+          <div class="card-container">
+            ${exportArea}
+          <\/div>
+        <\/body>
+        <\/html>
+        `;
+        
+        // 创建 Blob 对象并触发下载
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+        const link = document.createElement('a');
+        link.download = `${currentCardTitle}-色彩档案.html`;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+      }
+
+      // 请求 DashScope/Qwen 接口
+      async function fetchAIResponse(userMessage, tid) {
+        // 动态构建系统提示词，植入当前浏览的派系上下文
+        const systemPrompt = `你是一位深耕中国古建筑色彩美学的专家学者，精通包括川派、苏派、徽派、京派、闽派、晋派等在内的众多建筑流派。当前用户正在浏览【${activeSchoolName}】，请优先结合该派系特色进行解答。用专业、富有文化底蕴的语言回答，尽量控制在200字以内。`;
+
+        // 拼接对话上下文
+        let messagesPayload = [
+          { role: "system", content: systemPrompt },
+          ...aiConversationHistory,
+          { role: "user", content: userMessage }
+        ];
+
+        try {
+          const response = await fetch(DASH_SCOPE_ENDPOINT, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${DASH_SCOPE_API_KEY}`
+            },
+            body: JSON.stringify({
+              model: "qwen-max",
+              messages: messagesPayload,
+              max_tokens: 1024,
+              temperature: 0.7
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          const aiReply = data.choices[0].message.content;
+
+          // 将新的对话记录推入历史数组
+          aiConversationHistory.push({ role: "user", content: userMessage });
+          aiConversationHistory.push({ role: "assistant", content: aiReply });
+          
+          // 限制历史记忆条数（防止 token 溢出）
+          if (aiConversationHistory.length > 20) {
+            aiConversationHistory.splice(0, 2);
+          }
+
+          // 简单解析 markdown 加粗并替换换行符，更新到 UI
+          let formattedReply = aiReply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+          updateMsg(tid, formattedReply);
+          
+        } catch (error) {
+          console.error("AI API Error:", error);
+          updateMsg(tid, "哎呀抱歉，我的思绪似乎被云雾遮挡了（接口请求出错或网络受限），请稍后再试。");
+        }
+      }
+
+      // 发送按钮点击事件 (常规提问)
+      document.getElementById("ai-send").onclick = () => {
+        let ipt = document.getElementById("ai-input"); 
+        let text = ipt.value.trim();
+        if(!text) return;
+        appendMsg("user", text);
+        ipt.value = "";
+        const tid = appendMsg("ai", '<span style="color:var(--ink-light);font-size:12px;">⏳ 正在查阅古籍、寻访色彩真谛，请稍候...</span>');
+        
+        // 触发真实请求
+        fetchAIResponse(text, tid);
+      };
+
+      // 支持回车键发送
+      document.getElementById("ai-input").addEventListener("keypress", function(e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          document.getElementById("ai-send").click();
+        }
+      });
+
+      function sendSuggestedMessage(text) {
+        const ipt = document.getElementById("ai-input");
+        ipt.value = text;
+        document.getElementById("ai-send").click();
+      }
+
+      /* ==========================================
+         全屏报告悬浮窗逻辑 (Modal)
+         ========================================== */
+      function openReportModal() { document.getElementById("report-modal").classList.add("open"); }
+      function closeReportModal() {
+        document.getElementById("report-modal").classList.remove("open");
+        setTimeout(() => { document.getElementById("report-iframe").src = ""; }, 400);
+      }
+      document.getElementById("report-modal").onclick = (e) => { if (e.target === document.getElementById("report-modal")) closeReportModal(); };
+      
+      document.getElementById("report-fab").onclick = (e) => {
+        e.preventDefault(); const fab = e.currentTarget;
+        document.getElementById("rm-title").innerText = fab.dataset.title || "专属色彩解读报告";
+        document.getElementById("report-iframe").src = fab.dataset.url || "";
+        openReportModal();
+      };
+
+      /* ==========================================
+         全局联动与初始化
+         ========================================== */
+      let chinaMapChart = null; let wcChart = null;
+      const PROVINCE_SCHOOL = {}; 
+      let wordCloudMask = null;
+      let wcRotationInterval = null;
+
+      function initPlumBlossomMask() {
+        return new Promise(resolve => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 500; canvas.height = 500;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 500, 500); 
+          ctx.fillStyle = '#000'; 
+          ctx.translate(250, 250);
+          ctx.beginPath(); ctx.arc(0, 0, 110, 0, Math.PI * 2); ctx.fill(); 
+          for (let i = 0; i < 5; i++) {
+            ctx.beginPath(); ctx.arc(0, -140, 110, 0, Math.PI * 2); ctx.fill();
+            ctx.rotate((Math.PI * 2) / 5);
+          }
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.src = canvas.toDataURL();
+        });
+      }
+
+      function initApp() {
+        SCHOOLS_DATA.schools.forEach(s => {
+          Object.entries(s.provinces).forEach(([prov, pData]) => {
+            if (!PROVINCE_SCHOOL[prov]) PROVINCE_SCHOOL[prov] = [];
+            PROVINCE_SCHOOL[prov].push({ id: s.id, weight: pData.weight, color: s.primaryColor });
+          });
+        });
+        
+        const tabs = document.getElementById("school-tabs");
+        tabs.innerHTML = SCHOOLS_DATA.schools.map(s => 
+          `<button class="school-btn" data-id="${s.id}" style="--sc-color:${s.primaryColor}">
+             <div class="btn-dot" style="background:${s.primaryColor}"></div>${s.name}
+           </button>`
+        ).join("");
+        tabs.querySelectorAll(".school-btn").forEach(b => b.onclick = () => selectSchool(b.dataset.id));
+        
+        initMap();
+        
+        // 默认载入第一个流派
+        if(SCHOOLS_DATA.schools.length > 0) {
+            selectSchool(SCHOOLS_DATA.schools[0].id);
+        }
+      }
+
+      async function initMap() {
+        try {
+          const resp = await fetch("https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json");
+          const geoData = await resp.json();
+          echarts.registerMap("china", geoData); 
+          chinaMapChart = echarts.init(document.getElementById("china-map")); 
+          renderMap(null);
+        } catch(e) { console.warn("Map load failed", e); }
+      }
+
+      function renderMap(activeId) {
+        if (!chinaMapChart) return; 
+        const sData = [];
+        Object.entries(PROVINCE_SCHOOL).forEach(([prov, entries]) => {
+          if (activeId) {
+            const match = entries.find(e => e.id === activeId);
+            if (match) sData.push({ name: prov, value: match.weight, itemStyle: { areaColor: match.color, opacity: 0.65 } });
+            else sData.push({ name: prov, value: 0, itemStyle: { areaColor: "rgba(255,255,255,0.4)", borderColor: "#e6dfd1" } });
+          } else {
+            const top = [...entries].sort((a, b) => b.weight - a.weight)[0];
+            sData.push({ name: prov, value: top.weight, itemStyle: { areaColor: top.color, opacity: 0.3 } });
+          }
+        });
+        chinaMapChart.setOption({ 
+          tooltip:{show:false}, 
+          series:[{ 
+            type:"map", 
+            map:"china", 
+            roam:true, 
+            label: { show: true, fontSize: 10, color: 'rgba(44, 40, 37, 0.8)' }, 
+            itemStyle:{borderColor:"#dcd4c7"}, 
+            emphasis:{ label:{show:true, fontWeight: 'bold', color: '#a32b21', fontSize: 12}, itemStyle:{areaColor:"#e8e2d8"} }, 
+            data:sData 
+          }] 
+        }, true);
+      }
+
+      function restoreMapZoom() { if(chinaMapChart) chinaMapChart.dispatchAction({type:'restore'}); }
+
+      function selectSchool(id) {
+        document.querySelectorAll(".school-btn").forEach(b => b.classList.toggle("active", b.dataset.id === id));
+        const s = SCHOOLS_DATA.schools.find(x => x.id === id);
+        
+        // 更新 AI 上下文中的派系名称
+        activeSchoolName = s ? s.name : "全局地图";
+        
+        renderMap(id);
+        updateDashboardCharts(s);
+        renderBuildings(id);
+        
+        const fab = document.getElementById("report-fab");
+        let reportPath = `data/charts/fenxi_${id}.html`;
+        if (id === 'jin') reportPath = `data/charts/fenxi _jin.html`;
+        
+        fab.dataset.url = reportPath;
+        fab.dataset.title = `${s.name} · 专属色彩解读报告`;
+        document.getElementById("report-fab-text").innerText = `查看【${s.name}】专属解读报告`;
+        fab.style.borderColor = s.primaryColor; fab.style.color = s.primaryColor;
+        fab.onmouseover = () => { fab.style.background = s.primaryColor; fab.style.color = "#fff"; fab.style.boxShadow = `0 12px 32px rgba(0,0,0,0.2)`; };
+        fab.onmouseout = () => { fab.style.background = "rgba(255,255,255,0.95)"; fab.style.color = s.primaryColor; fab.style.boxShadow = "0 10px 30px rgba(0,0,0,0.1)"; };
+        fab.classList.add("active");
+        
+        document.getElementById("wc-empty").style.display = "none";
+        if(!wcChart) wcChart = echarts.init(document.getElementById("wordcloud-chart"));
+        else wcChart.clear();
+        clearInterval(wcRotationInterval);
+        
+        const rawWc = WORDCLOUD_DATA && Array.isArray(WORDCLOUD_DATA[id]) ? WORDCLOUD_DATA[id] : [];
+        let rawData = [];
+        if (rawWc.length > 0) { rawData = rawWc; } else {
+            const words = ["斗拱","彩画","藻井","飞檐","青砖","灰瓦","石雕","月洞门","马头墙","穿斗式", "抬梁式", "歇山顶", "雀替", "花窗", "照壁", "木雕", "天井", "山墙", "漏窗"];
+            rawData = words.map(w=>({word: w, size: Math.random()*60+15}));
+        }
+
+        const palette = [s.primaryColor, s.primaryColor, '#2c2825', '#6b635e', '#8a7d71', '#dcd4c7'];
+        const wcData = rawData.map((item) => ({
+          name: item.word, value: item.size,
+          textStyle: { color: palette[Math.floor(Math.random() * palette.length)], fontFamily: "Zhi Mang Xing, Noto Serif SC, serif", fontWeight: item.size >= 45 ? "900" : "400" },
+        }));
+
+        const chunkSize = 45; const chunks = [];
+        for (let i = 0; i < wcData.length; i += chunkSize) chunks.push(wcData.slice(i, i + chunkSize));
+
+        let currentChunkIndex = 0;
+        function updateChart() {
+          if (!chunks.length) return;
+          wcChart.setOption({
+            series: [{
+              type: "wordCloud", maskImage: wordCloudMask, left: "center", top: "center", width: "100%", height: "100%", 
+              sizeRange: [16, 75], rotationRange: [-45, 90], rotationStep: 45, gridSize: 6, drawOutOfBound: false, layoutAnimation: true,
+              textStyle: { fontFamily: "Zhi Mang Xing, Noto Serif SC, serif", textShadowBlur: 1, textShadowColor: "rgba(255,255,255,0.7)" },
+              emphasis: { focus: "self", textStyle: { color: "#a32b21", textShadowBlur: 8, textShadowColor: "rgba(163, 43, 33, 0.3)" } },
+              data: chunks[currentChunkIndex],
+            }],
+          });
+          currentChunkIndex = (currentChunkIndex + 1) % chunks.length;
+        }
+        updateChart();
+        if (chunks.length > 1) wcRotationInterval = setInterval(updateChart, 4000);
+      }
+
+      function openLightbox(src) { document.getElementById("lb-img").src = src; document.getElementById("lightbox").classList.add("open"); }
+      document.getElementById("lb-close").onclick = () => document.getElementById("lightbox").classList.remove("open"); document.getElementById("lightbox").onclick = (e) => { if (e.target === document.getElementById("lightbox")) document.getElementById("lightbox").classList.remove("open"); };
+
+      window.addEventListener("resize", () => { if(chinaMapChart) chinaMapChart.resize(); if(wcChart) wcChart.resize(); });
+      
+      (async function boot() { 
+        wordCloudMask = await initPlumBlossomMask();
+        await loadExternalData(); 
+        normalizeAllData(); 
+        initApp(); 
+      })();
+    </script>
+  </body>
+</html>

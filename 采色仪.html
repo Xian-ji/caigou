@@ -1,0 +1,2404 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <title>建筑色彩分析工作站 v3 - 国风版</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Zhi+Mang+Xing&family=Noto+Serif+SC:wght@300;400;600;700&family=DM+Mono:wght@300;400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f9f7f1; /* 宣纸色 */
+        --surface: transparent;
+        --panel: rgba(0, 0, 0, 0.02);
+        --border: #dcd4c7;
+        --border2: #e8e2d8;
+        --accent: #a32b21; /* 印章红 */
+        --accent2: #8a241b;
+        --gold: #a32b21;
+        --green: #4a9464;
+        --red: #a32b21;
+        --text: #2c2825; /* 浓墨 */
+        --muted: #6b635e; /* 淡墨 */
+        --mono: "DM Mono", monospace;
+        --sans: "Noto Serif SC", serif;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        min-height: 100vh;
+        overflow-x: hidden;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      }
+
+      header {
+        position: relative;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 32px;
+        height: 72px;
+        border-bottom: 1px solid var(--border);
+      }
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .logo-icon {
+        width: 32px;
+        height: 32px;
+        background: var(--accent);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-family: "Zhi Mang Xing", cursive;
+        font-size: 20px;
+      }
+      .logo-icon::after {
+        content: "印";
+      }
+      .logo-text {
+        font-family: "Zhi Mang Xing", cursive;
+        font-size: 28px;
+        letter-spacing: 4px;
+        color: var(--text);
+      }
+      .logo-sub {
+        font-size: 11px;
+        color: var(--muted);
+        letter-spacing: 2px;
+      }
+      .header-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green);
+      }
+
+      /* ── Layout ── */
+      .workspace {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        height: calc(100vh - 72px);
+      }
+      .sidebar {
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+      .sidebar::-webkit-scrollbar {
+        width: 4px;
+      }
+      .sidebar::-webkit-scrollbar-thumb {
+        background: var(--border2);
+      }
+      .panel-section {
+        padding: 20px;
+        border-bottom: 1px dashed var(--border);
+      }
+      .section-label {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 2px;
+        color: var(--text);
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .section-label::before {
+        content: "";
+        width: 3px;
+        height: 14px;
+        background: var(--accent);
+      }
+
+      /* ── Drop zone ── */
+      .drop-zone {
+        border: 1px dashed var(--muted);
+        padding: 28px 16px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: var(--panel);
+      }
+      .drop-zone:hover,
+      .drop-zone.drag-over {
+        border-color: var(--accent);
+        background: rgba(163, 43, 33, 0.03);
+      }
+      .drop-icon {
+        font-size: 24px;
+        margin-bottom: 10px;
+        display: block;
+        color: var(--muted);
+      }
+      .drop-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 4px;
+      }
+      .drop-sub {
+        font-size: 11px;
+        color: var(--muted);
+        font-family: var(--mono);
+      }
+      #fileInput {
+        display: none;
+      }
+      .file-list {
+        margin-top: 12px;
+        max-height: 110px;
+        overflow-y: auto;
+      }
+      .file-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 8px;
+        border-bottom: 1px solid var(--border2);
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text);
+      }
+      .file-thumb {
+        width: 28px;
+        height: 28px;
+        object-fit: cover;
+        border: 1px solid var(--border);
+      }
+      .file-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .remove-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 14px;
+        padding: 0 2px;
+      }
+      .remove-btn:hover {
+        color: var(--red);
+      }
+
+      /* ── Params ── */
+      .param-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+      .param-label {
+        font-size: 12px;
+        color: var(--text);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-weight: 600;
+      }
+      .param-hint {
+        font-size: 10px;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-weight: 400;
+      }
+      .param-control {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .num-btn {
+        width: 26px;
+        height: 26px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .num-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .num-val {
+        font-family: var(--mono);
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--accent);
+        min-width: 24px;
+        text-align: center;
+      }
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .toggle-label {
+        font-size: 12px;
+        color: var(--text);
+        font-weight: 600;
+      }
+      .toggle {
+        position: relative;
+        width: 36px;
+        height: 20px;
+        cursor: pointer;
+      }
+      .toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+      }
+      .toggle-track {
+        position: absolute;
+        inset: 0;
+        background: var(--border);
+        border-radius: 10px;
+        transition: 0.2s;
+      }
+      .toggle input:checked + .toggle-track {
+        background: var(--accent);
+      }
+      .toggle-thumb {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        background: var(--bg);
+        border-radius: 50%;
+        transition: 0.2s;
+        pointer-events: none;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+      .toggle input:checked ~ .toggle-thumb {
+        transform: translateX(16px);
+      }
+
+      /* ── Filter section specific ── */
+      .filter-divider {
+        height: 1px;
+        background: dashed var(--border);
+        margin: 10px 0;
+        border-top: 1px dashed var(--border);
+      }
+      .anchor-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 8px;
+      }
+      .anchor-chip {
+        padding: 2px 6px;
+        border: 1px solid var(--border);
+        font-family: var(--sans);
+        font-size: 10px;
+      }
+      .filter-warning {
+        background: rgba(163, 43, 33, 0.05);
+        border: 1px solid rgba(163, 43, 33, 0.2);
+        padding: 7px 10px;
+        margin-top: 8px;
+        font-size: 10px;
+        color: var(--accent);
+        line-height: 1.5;
+      }
+
+      /* ── Run button ── */
+      .run-btn {
+        width: 100%;
+        padding: 12px;
+        background: transparent;
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        font-family: var(--sans);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .run-btn:hover {
+        background: var(--accent);
+        color: #fff;
+      }
+      .run-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .export-group {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .export-btn {
+        flex: 1;
+        padding: 8px 6px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 10px;
+        cursor: pointer;
+        transition: 0.2s;
+        text-align: center;
+      }
+      .export-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .export-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+
+      /* ── Main area ── */
+      .main-area {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .tab-bar {
+        display: flex;
+        border-bottom: 1px solid var(--border);
+        padding: 0 24px;
+        gap: 20px;
+        flex-shrink: 0;
+      }
+      .tab {
+        padding: 14px 0;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 2px;
+        color: var(--muted);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: 0.2s;
+      }
+      .tab:hover {
+        color: var(--text);
+      }
+      .tab.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+      }
+      .tab-badge {
+        font-family: var(--mono);
+        font-size: 10px;
+        margin-left: 4px;
+      }
+      .tab-content {
+        display: none;
+        flex: 1;
+        overflow: hidden;
+      }
+      .tab-content.active {
+        display: flex;
+        flex-direction: column;
+      }
+      .empty-state {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        color: var(--muted);
+      }
+      .empty-icon {
+        font-size: 32px;
+        font-family: "Zhi Mang Xing";
+        color: var(--border);
+      }
+      .empty-title {
+        font-size: 15px;
+        letter-spacing: 2px;
+        color: var(--text);
+      }
+      .empty-sub {
+        font-size: 12px;
+      }
+
+      /* ── Gallery ── */
+      #galleryContent {
+        flex: 1;
+        overflow-y: auto;
+        padding: 24px;
+      }
+      #galleryContent::-webkit-scrollbar {
+        width: 5px;
+      }
+      #galleryContent::-webkit-scrollbar-thumb {
+        background: var(--border2);
+      }
+      .gallery-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .gallery-search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--border);
+        padding: 6px 12px;
+        background: var(--bg);
+      }
+      .gallery-search input {
+        background: none;
+        border: none;
+        outline: none;
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 12px;
+        width: 180px;
+      }
+      .sort-btns {
+        display: flex;
+        gap: 6px;
+      }
+      .sort-btn {
+        padding: 4px 10px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .sort-btn:hover,
+      .sort-btn.active {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .cards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 16px;
+      }
+      #gallerySentinel {
+        height: 2px;
+        margin-top: 24px;
+      }
+      .load-more-indicator {
+        text-align: center;
+        font-size: 12px;
+        color: var(--muted);
+        padding: 16px;
+      }
+
+      /* ── Cards ── */
+      .img-card {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        transition: 0.2s;
+        cursor: pointer;
+        padding: 6px;
+      }
+      .img-card:hover {
+        border-color: var(--accent);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      }
+      .card-preview {
+        height: 140px;
+        overflow: hidden;
+        position: relative;
+        border: 1px solid var(--border2);
+      }
+      .card-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .card-preview-label {
+        position: absolute;
+        bottom: 4px;
+        left: 4px;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 2px 4px;
+      }
+      .card-body {
+        padding: 10px 4px 4px;
+      }
+      .card-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        margin-bottom: 8px;
+      }
+      .swatch-bar {
+        display: flex;
+        height: 16px;
+        border: 1px solid var(--border2);
+        overflow: hidden;
+        gap: 0;
+        margin-bottom: 8px;
+      }
+      .swatch-seg {
+        flex: 1;
+        min-width: 3px;
+      }
+      .wc-badges {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 7px;
+      }
+      .badge {
+        padding: 2px 6px;
+        border: 1px solid var(--border);
+        font-size: 9px;
+        font-family: var(--mono);
+      }
+      .hue-seg-mini {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .hsm-row {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .hsm-name {
+        font-size: 10px;
+        color: var(--muted);
+        width: 24px;
+      }
+      .hsm-bar {
+        flex: 1;
+        height: 3px;
+        background: var(--border2);
+        overflow: hidden;
+      }
+      .hsm-fill {
+        height: 100%;
+      }
+      .hsm-val {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--muted);
+        width: 30px;
+        text-align: right;
+      }
+      .card-metrics {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .metric-chip {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--muted);
+      }
+
+      /* ── Progress ── */
+      #progressRunning {
+        display: none;
+        flex: 1;
+        padding: 32px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+      }
+      .progress-pct {
+        font-family: "Zhi Mang Xing";
+        font-size: 48px;
+        color: var(--accent);
+      }
+      .progress-log {
+        width: 100%;
+        max-width: 520px;
+        border: 1px solid var(--border);
+        padding: 12px 16px;
+        max-height: 200px;
+        overflow-y: auto;
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+      .log-line {
+        padding: 2px 0;
+        border-bottom: 1px dashed var(--border2);
+      }
+      .log-ok {
+        color: var(--text);
+      }
+      .log-err {
+        color: var(--accent);
+      }
+      .log-info {
+        color: var(--muted);
+      }
+      .log-done {
+        color: var(--accent);
+        font-weight: bold;
+      }
+      .worker-status {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .worker-dot {
+        width: 6px;
+        height: 6px;
+        background: var(--border);
+      }
+      .worker-dot.active {
+        background: var(--accent);
+      }
+
+      /* ── Summary ── */
+      #summaryContent {
+        flex: 1;
+        overflow-y: auto;
+        padding: 24px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-content: start;
+      }
+      .chart-card {
+        border: 1px solid var(--border);
+        padding: 18px;
+        background: var(--bg);
+      }
+      .chart-card.wide {
+        grid-column: 1 / -1;
+      }
+      .chart-title {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 2px;
+        color: var(--text);
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .chart-title::before {
+        content: "";
+        width: 3px;
+        height: 14px;
+        background: var(--accent);
+      }
+      .chart-wrapper {
+        position: relative;
+        height: 200px;
+      }
+      .chart-wrapper.tall {
+        height: 260px;
+      }
+
+      /* ── Modal ── */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        background: rgba(249, 247, 241, 0.85);
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-overlay.show {
+        display: flex;
+      }
+      .modal {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        width: min(92vw, 900px);
+        max-height: 88vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+      .modal-header {
+        padding: 20px 24px 16px;
+        border-bottom: 1px dashed var(--border);
+        display: flex;
+        justify-content: space-between;
+      }
+      .modal-fname {
+        font-size: 16px;
+        font-weight: bold;
+        color: var(--text);
+      }
+      .modal-meta {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .modal-close {
+        background: none;
+        border: none;
+        color: var(--text);
+        font-size: 24px;
+        cursor: pointer;
+      }
+      .modal-body {
+        padding: 24px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+      }
+      .modal-section-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 12px;
+        border-left: 3px solid var(--accent);
+        padding-left: 8px;
+      }
+      .swatch-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .swatch-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px;
+        border-bottom: 1px dashed var(--border2);
+      }
+      .swatch-block {
+        width: 32px;
+        height: 32px;
+        border: 1px solid var(--border);
+      }
+      .swatch-info {
+        flex: 1;
+      }
+      .swatch-hex {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .swatch-nums {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .swatch-ratios {
+        text-align: right;
+      }
+      .ratio-main {
+        font-family: var(--mono);
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .stat-box {
+        border: 1px solid var(--border);
+        padding: 8px 12px;
+      }
+      .stat-name {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .stat-val {
+        font-family: var(--mono);
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .hue-seg-full {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .hue-full-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 11px;
+      }
+      .hue-full-bar {
+        flex: 1;
+        height: 4px;
+        background: var(--border2);
+      }
+      .hue-full-fill {
+        height: 100%;
+      }
+
+      /* ── Toast ── */
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 200;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--text);
+        padding: 12px 18px;
+        font-size: 13px;
+        transform: translateY(80px);
+        opacity: 0;
+        transition: 0.3s;
+      }
+      .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+      }
+      .toast.err {
+        border-left-color: var(--accent);
+      }
+      .quick-btn {
+        border: 1px solid var(--border);
+        background: transparent;
+        padding: 4px 8px;
+        font-size: 11px;
+        cursor: pointer;
+        color: var(--text);
+        margin-right: 4px;
+        margin-bottom: 4px;
+      }
+      .quick-btn:hover,
+      .quick-btn.active {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">
+        <div class="logo-icon"></div>
+        <div>
+          <div class="logo-text">彩构拾色</div>
+          <div class="logo-sub">建筑图片色彩分析工作站 v3</div>
+        </div>
+      </div>
+      <div class="header-status">
+        <div class="status-dot"></div>
+        <span id="statusText">就绪</span>
+        &nbsp;|&nbsp; 卷三
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar">
+        <div class="panel-section">
+          <div class="section-label">卷册导入</div>
+          <div class="drop-zone" id="dropZone">
+            <span class="drop-icon">图</span>
+            <div class="drop-title">拖拽图像至此 / 点击选择</div>
+            <div class="drop-sub">JPG · PNG · WEBP</div>
+          </div>
+          <input type="file" id="fileInput" accept="image/*" multiple />
+          <div class="file-list" id="fileList"></div>
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              margin-top: 10px;
+            "
+          >
+            <span style="font-size: 11px; color: var(--muted)"
+              >已加载
+              <span id="fileCount" style="color: var(--accent)">0</span>
+              张</span
+            >
+            <button
+              class="export-btn"
+              style="width: auto; padding: 4px 8px"
+              onclick="clearAll()"
+            >
+              清空
+            </button>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="section-label">分析制式</div>
+          <div class="param-row">
+            <div class="param-label">
+              主色调数量<span class="param-hint">K-Means++ 聚类数</span>
+            </div>
+            <div class="param-control">
+              <button class="num-btn" onclick="adjustParam('nColors', -1)">
+                −
+              </button>
+              <input
+                type="number"
+                id="nColorsVal"
+                value="8"
+                min="2"
+                max="256"
+                style="
+                  width: 40px;
+                  background: none;
+                  border: none;
+                  border-bottom: 1px solid var(--border);
+                  color: var(--accent);
+                  font-family: var(--mono);
+                  font-size: 14px;
+                  font-weight: 700;
+                  text-align: center;
+                  outline: none;
+                "
+                oninput="syncKInput(this)"
+                onblur="clampKInput(this)"
+              />
+              <button class="num-btn" onclick="adjustParam('nColors', 1)">
+                ＋
+              </button>
+            </div>
+          </div>
+          <div
+            class="k-warning"
+            id="kWarning"
+            style="
+              display: none;
+              font-size: 10px;
+              color: var(--accent);
+              margin-bottom: 10px;
+            "
+          >
+            ⚠ K&gt;64 分析较慢
+          </div>
+          <div class="param-row">
+            <div class="param-label">
+              采样精度<span class="param-hint">缩放至长边像素</span>
+            </div>
+            <div class="param-control">
+              <button class="num-btn" onclick="adjustParam('resize', -50)">
+                −
+              </button>
+              <div
+                class="num-val"
+                id="resizeVal"
+                style="font-size: 12px; min-width: 38px"
+              >
+                300px
+              </div>
+              <button class="num-btn" onclick="adjustParam('resize', 50)">
+                ＋
+              </button>
+            </div>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">生成单图详细报告</span>
+            <label class="toggle"
+              ><input type="checkbox" id="toggleSingle" checked />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div
+            ></label>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">实时预览（逐图更新）</span>
+            <label class="toggle"
+              ><input type="checkbox" id="toggleRealtime" checked />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div
+            ></label>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="section-label">杂色滤除</div>
+          <div style="margin-bottom: 12px">
+            <div
+              style="font-size: 11px; color: var(--muted); margin-bottom: 7px"
+            >
+              一键滤除
+            </div>
+            <div style="display: flex; flex-wrap: wrap">
+              <button
+                class="quick-btn"
+                id="qBtnShadow"
+                onclick="quickFilter('shadow')"
+              >
+                除影
+              </button>
+              <button
+                class="quick-btn"
+                id="qBtnSky"
+                onclick="quickFilter('sky')"
+              >
+                除天
+              </button>
+              <button
+                class="quick-btn"
+                id="qBtnVeg"
+                onclick="quickFilter('veg')"
+              >
+                除树
+              </button>
+              <button
+                class="quick-btn"
+                id="qBtnAll"
+                onclick="quickFilter('all')"
+              >
+                全滤
+              </button>
+              <button class="quick-btn" onclick="quickFilter('reset')">
+                重置
+              </button>
+            </div>
+          </div>
+          <div class="filter-divider"></div>
+          <div class="toggle-row" style="margin-top: 10px">
+            <span class="toggle-label">传统建筑色优先保留</span>
+            <label class="toggle"
+              ><input type="checkbox" id="togArchColors" checked />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div
+            ></label>
+          </div>
+          <div class="anchor-legend" id="anchorLegend"></div>
+          <div class="filter-divider"></div>
+          <div class="toggle-row">
+            <span class="toggle-label">过滤天空蓝</span>
+            <label class="toggle"
+              ><input type="checkbox" id="togSky" checked />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div
+            ></label>
+          </div>
+          <div class="param-row" style="margin-bottom: 10px">
+            <div class="param-label">饱和度阈值</div>
+            <div class="param-control">
+              <button class="num-btn" onclick="adjustFilter('skyS', -0.05)">
+                −
+              </button>
+              <div
+                class="num-val"
+                id="skySVal"
+                style="font-size: 12px; min-width: 36px"
+              >
+                0.50
+              </div>
+              <button class="num-btn" onclick="adjustFilter('skyS', 0.05)">
+                ＋
+              </button>
+            </div>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">过滤植被绿</span>
+            <label class="toggle"
+              ><input type="checkbox" id="togVeg" checked />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div
+            ></label>
+          </div>
+          <div class="param-row" style="margin-bottom: 10px">
+            <div class="param-label">色相边界</div>
+            <div class="param-control">
+              <button class="num-btn" onclick="adjustFilter('vegH', -5)">
+                −
+              </button>
+              <div
+                class="num-val"
+                id="vegHVal"
+                style="font-size: 12px; min-width: 36px"
+              >
+                145°
+              </div>
+              <button class="num-btn" onclick="adjustFilter('vegH', 5)">
+                ＋
+              </button>
+            </div>
+          </div>
+          <div class="filter-divider"></div>
+          <div class="param-row" style="margin-bottom: 10px">
+            <div class="param-label">阴影明度阈值</div>
+            <div class="param-control">
+              <button class="num-btn" onclick="adjustFilter('shadow', -0.01)">
+                −
+              </button>
+              <div
+                class="num-val"
+                id="shadowVal"
+                style="font-size: 12px; min-width: 36px"
+              >
+                0.12
+              </div>
+              <button class="num-btn" onclick="adjustFilter('shadow', 0.01)">
+                ＋
+              </button>
+            </div>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">空间位置加权</span>
+            <label class="toggle"
+              ><input type="checkbox" id="togSpatial" checked />
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div
+            ></label>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="section-label">执行印可</div>
+          <div
+            class="worker-status"
+            id="workerStatus"
+            style="margin-bottom: 10px"
+          >
+            <span>工坊:</span>
+            <div class="worker-dot" id="wd0"></div>
+            <div class="worker-dot" id="wd1"></div>
+            <div class="worker-dot" id="wd2"></div>
+            <div class="worker-dot" id="wd3"></div>
+            <span id="workerStatusText">待机</span>
+          </div>
+          <button class="run-btn" id="runBtn" onclick="startAnalysis()">
+            启 动
+          </button>
+          <div class="export-group" style="margin-top: 14px">
+            <button
+              class="export-btn"
+              id="exportCsvBtn"
+              onclick="exportCSV()"
+              disabled
+            >
+              CSV
+            </button>
+            <button
+              class="export-btn"
+              id="exportJsonBtn"
+              onclick="exportJSON()"
+              disabled
+            >
+              JSON
+            </button>
+            <button
+              class="export-btn"
+              id="exportHtmlBtn"
+              onclick="exportHTMLReport()"
+              disabled
+            >
+              HTML
+            </button>
+          </div>
+          <button
+            class="export-btn"
+            style="width: 100%; margin-top: 8px"
+            onclick="downloadPyScript()"
+          >
+            Python 脚本说明
+          </button>
+        </div>
+      </aside>
+
+      <div class="main-area">
+        <div class="tab-bar">
+          <div class="tab active" onclick="switchTab('gallery')">
+            画廊 <span class="tab-badge" id="galleryBadge">0</span>
+          </div>
+          <div class="tab" onclick="switchTab('summary')">
+            汇览 <span class="tab-badge" id="summaryBadge">0</span>
+          </div>
+          <div class="tab" onclick="switchTab('progress')">纪事</div>
+        </div>
+
+        <div class="tab-content active" id="tab-gallery">
+          <div id="emptyGallery" class="empty-state" style="flex: 1">
+            <div class="empty-icon">空</div>
+            <div class="empty-title">卷宗未载</div>
+            <div class="empty-sub">请自左侧导入图像</div>
+          </div>
+          <div id="galleryContent" style="display: none">
+            <div class="gallery-toolbar">
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 10px;
+                  flex-wrap: wrap;
+                "
+              >
+                <div class="gallery-search">
+                  寻
+                  <input
+                    id="searchInput"
+                    placeholder="文件名…"
+                    oninput="filterCards()"
+                  />
+                </div>
+                <div class="sort-btns">
+                  <button
+                    class="sort-btn active"
+                    onclick="sortCards('name', this)"
+                  >
+                    名
+                  </button>
+                  <button class="sort-btn" onclick="sortCards('warm', this)">
+                    暖
+                  </button>
+                  <button class="sort-btn" onclick="sortCards('rich', this)">
+                    丰
+                  </button>
+                  <button class="sort-btn" onclick="sortCards('bright', this)">
+                    明
+                  </button>
+                  <button class="sort-btn" onclick="sortCards('filt', this)">
+                    滤
+                  </button>
+                </div>
+              </div>
+              <span style="font-size: 11px; color: var(--muted)" id="cardCount"
+                >0 张</span
+              >
+            </div>
+            <div class="cards-grid" id="cardsGrid"></div>
+            <div id="gallerySentinel"></div>
+            <div
+              class="load-more-indicator"
+              id="loadMoreIndicator"
+              style="display: none"
+            >
+              加载更多…
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-summary">
+          <div id="emptySummary" class="empty-state" style="flex: 1">
+            <div class="empty-icon">图</div>
+            <div class="empty-title">尚无汇览</div>
+          </div>
+          <div id="summaryContent" style="display: none">
+            <div class="chart-card">
+              <div class="chart-title">冷暖色调分布</div>
+              <div class="chart-wrapper">
+                <canvas id="chartWarmCool"></canvas>
+              </div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">明度饱和度散点</div>
+              <div class="chart-wrapper">
+                <canvas id="chartScatter"></canvas>
+              </div>
+            </div>
+            <div class="chart-card wide">
+              <div class="chart-title">十二段色相区间</div>
+              <div class="chart-wrapper">
+                <canvas id="chartHueSeg"></canvas>
+              </div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">色彩丰富度</div>
+              <div class="chart-wrapper">
+                <canvas id="chartRichness"></canvas>
+              </div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">色相均值分布</div>
+              <div class="chart-wrapper">
+                <canvas id="chartHueDist"></canvas>
+              </div>
+            </div>
+            <div class="chart-card wide">
+              <div class="chart-title">色相区间热力图</div>
+              <div style="overflow-x: auto">
+                <canvas id="chartHeatmap" style="min-width: 400px"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-progress">
+          <div id="progressIdle" class="empty-state" style="flex: 1">
+            <div class="empty-icon">序</div>
+            <div class="empty-title">等待执行</div>
+          </div>
+          <div id="progressRunning">
+            <div class="progress-pct" id="progressPct">0%</div>
+            <div
+              style="
+                font-family: var(--mono);
+                font-size: 12px;
+                color: var(--muted);
+              "
+              id="progressFrac"
+            >
+              0 / 0
+            </div>
+            <div class="progress-log" id="progressLog"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="detailModal" onclick="closeModal(event)">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <div class="modal-fname" id="modalFname">—</div>
+            <div class="modal-meta" id="modalMeta">—</div>
+          </div>
+          <button class="modal-close" onclick="closeModalBtn()">×</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+      </div>
+    </div>
+    <div class="toast" id="toast"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <script>
+      "use strict";
+      // --- Worker, Algorithms, Logic identical to original. Only UI/Chart colors changed ---
+
+      const WORKER_CODE = `
+'use strict';
+function rgbToHsv(r,g,b){ r/=255;g/=255;b/=255; const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min; let h=0; if(d>0){ if(max===r)h=((g-b)/d)%6; else if(max===g)h=(b-r)/d+2; else h=(r-g)/d+4; h/=6;if(h<0)h+=1; } return[h,max>0?d/max:0,max]; }
+function rgbHex(r,g,b){ return'#'+[r,g,b].map(v=>Math.round(v).toString(16).padStart(2,'0').toUpperCase()).join(''); }
+function colorDist2(a,b){return(a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2;}
+const ARCH_ANCHORS=[ {n:'朱砂红',hMin:0,hMax:22,sMin:0.55,sMax:1.00,vMin:0.40,vMax:0.90}, {n:'赤红',hMin:345,hMax:360,sMin:0.55,sMax:1.00,vMin:0.40,vMax:0.90}, {n:'朱膘',hMin:15,hMax:35,sMin:0.45,sMax:0.85,vMin:0.50,vMax:0.85}, {n:'赭石棕',hMin:22,hMax:42,sMin:0.35,sMax:0.80,vMin:0.25,vMax:0.65}, {n:'檀色',hMin:10,hMax:30,sMin:0.30,sMax:0.70,vMin:0.35,vMax:0.70}, {n:'雌黄',hMin:42,hMax:62,sMin:0.40,sMax:0.85,vMin:0.45,vMax:0.85}, {n:'琉璃黄',hMin:35,hMax:55,sMin:0.60,sMax:1.00,vMin:0.50,vMax:0.95}, {n:'石绿',hMin:135,hMax:175,sMin:0.50,sMax:0.95,vMin:0.25,vMax:0.70}, {n:'石青',hMin:200,hMax:245,sMin:0.50,sMax:0.95,vMin:0.20,vMax:0.70}, {n:'宝蓝',hMin:220,hMax:250,sMin:0.60,sMax:1.00,vMin:0.25,vMax:0.65} ];
+function isArchitecturalColor(hDeg,s,v){ for(const a of ARCH_ANCHORS){ if(hDeg>=a.hMin&&hDeg<=a.hMax&&s>=a.sMin&&s<=a.sMax&&v>=a.vMin&&v<=a.vMax)return true; } return false; }
+function isShadow(v,thr){return v<thr;} function isOverexposed(v,s){return v>0.94&&s<0.06;}
+function isSkyBlue(hDeg,s,v,skySThr){ return hDeg>=185&&hDeg<=235&&s<skySThr&&v>0.48; }
+function isVegetationGreen(hDeg,s,v,vegHBound,vegSThr){ if(hDeg>=75&&hDeg<=vegHBound&&s<vegSThr){ if(hDeg>130&&s>0.55)return false; return true; } return false; }
+function stratifiedSample(data,width,height,maxSamples){ const total=width*height; const step=Math.max(1,Math.round(Math.sqrt(total/maxSamples))); const gridCols=Math.ceil(width/step); const gridRows=Math.ceil(height/step); const pixels=[]; const yCoords=[]; for(let gy=0;gy<gridRows;gy++){ for(let gx=0;gx<gridCols;gx++){ const x0=gx*step,y0=gy*step; const x1=Math.min(x0+step,width),y1=Math.min(y0+step,height); const px=x0+Math.floor(Math.random()*(x1-x0)); const py=y0+Math.floor(Math.random()*(y1-y0)); const idx=(py*width+px)*4; pixels.push([data[idx],data[idx+1],data[idx+2]]); yCoords.push(py); } } return{pixels,yCoords}; }
+function kMeansPlus(pixels,k){ if(pixels.length===0)return[]; k=Math.min(k,pixels.length); const centers=[]; centers.push([...pixels[Math.floor(Math.random()*pixels.length)]]); let minDists=pixels.map(p=>colorDist2(p,centers[0])); for(let c=1;c<k;c++){ const total=minDists.reduce((s,d)=>s+d,0); if(total===0)break; let r=Math.random()*total; let chosen=pixels.length-1; for(let i=0;i<minDists.length;i++){r-=minDists[i];if(r<=0){chosen=i;break;}} centers.push([...pixels[chosen]]); const nc=centers[centers.length-1]; for(let i=0;i<pixels.length;i++){ const d=colorDist2(pixels[i],nc); if(d<minDists[i])minDists[i]=d; } } const labels=new Int32Array(pixels.length); for(let iter=0;iter<35;iter++){ let changed=false; for(let i=0;i<pixels.length;i++){ let best=0,bestD=Infinity; for(let c=0;c<centers.length;c++){ const d=colorDist2(pixels[i],centers[c]); if(d<bestD){bestD=d;best=c;} } if(labels[i]!==best){labels[i]=best;changed=true;} } if(!changed)break; const sums=Array.from({length:centers.length},()=>[0,0,0,0]); for(let i=0;i<pixels.length;i++){ const c=labels[i]; sums[c][0]+=pixels[i][0];sums[c][1]+=pixels[i][1]; sums[c][2]+=pixels[i][2];sums[c][3]++; } for(let c=0;c<centers.length;c++){ if(sums[c][3]>0)centers[c]=[sums[c][0]/sums[c][3],sums[c][1]/sums[c][3],sums[c][2]/sums[c][3]]; } } const counts=new Array(centers.length).fill(0); labels.forEach(l=>counts[l]++); const total=pixels.length; const sorted=centers.map((c,i)=>{const[r,g,b]=c;const[h,s,v]=rgbToHsv(r,g,b);return{r:Math.round(r),g:Math.round(g),b:Math.round(b),h:h*360,s,v,cnt:counts[i]};}).filter(c=>c.cnt>0).sort((a,b)=>b.cnt-a.cnt); const topCnt=sorted[0]?sorted[0].cnt:1; return sorted.map(c=>({ hex:rgbHex(c.r,c.g,c.b), rgb:[c.r,c.g,c.b], hsv:[+c.h.toFixed(1),+c.s.toFixed(4),+c.v.toFixed(4)], ratio:+(c.cnt/total).toFixed(5), rel_ratio:+(c.cnt/topCnt).toFixed(5), })); }
+function normalize(arr){const s=arr.reduce((a,b)=>a+b,0);return s>0?arr.map(v=>v/s):arr.map(()=>0);}
+const HUE_SEG_NAMES=["红","橙","黄","黄绿","绿","青绿","青","天蓝","蓝","蓝紫","紫","品红"];
+self.onmessage=function(e){ const{id,pixelData,width,height,nColors,fp}=e.data; const{shadowThreshold,skyS,vegH,vegS,skyEnabled,vegEnabled,archEnabled,spatialFilter}=fp; const{pixels:sampled,yCoords}=stratifiedSample(pixelData,width,height,8000); const filtered=[]; const filteredY=[]; let excluded=0; for(let i=0;i<sampled.length;i++){ const[r,g,b]=sampled[i]; const[h,s,v]=rgbToHsv(r,g,b); const hDeg=h*360; const relY=yCoords[i]/height; if(archEnabled&&isArchitecturalColor(hDeg,s,v)){ filtered.push(sampled[i]);filteredY.push(yCoords[i]);continue; } if(isShadow(v,shadowThreshold)){excluded++;continue;} if(isOverexposed(v,s)){excluded++;continue;} if(spatialFilter&&relY<0.15&&isSkyBlue(hDeg,s,v,skyS+0.12)){excluded++;continue;} if(spatialFilter&&relY>0.92&&isVegetationGreen(hDeg,s,v,vegH,vegS)){excluded++;continue;} if(skyEnabled&&isSkyBlue(hDeg,s,v,skyS)){excluded++;continue;} if(vegEnabled&&isVegetationGreen(hDeg,s,v,vegH,vegS)){excluded++;continue;} filtered.push(sampled[i]);filteredY.push(yCoords[i]); } const filteredRatio=sampled.length>0?excluded/sampled.length:0; const k=Math.min(nColors, Math.max(filtered.length, sampled.length)); const forClustering=filtered.length>=Math.max(k*2,20)?filtered:sampled; const kActual=Math.min(k,forClustering.length); const swatches=kMeansPlus(forClustering,kActual); let sumH=0,sumS=0,sumV=0,sumH2=0,sumS2=0,sumV2=0; const hueHist=new Array(36).fill(0); const satHist=new Array(10).fill(0); const valHist=new Array(10).fill(0); const segCounts=new Array(12).fill(0); const sp=forClustering; for(let i=0;i<sp.length;i+=3){ const[r,g,b]=sp[i]; const[h,s,v]=rgbToHsv(r,g,b); const hDeg=h*360; sumH+=hDeg;sumS+=s;sumV+=v; sumH2+=hDeg*hDeg;sumS2+=s*s;sumV2+=v*v; hueHist[Math.min(35,Math.floor(hDeg/10))]++; satHist[Math.min(9,Math.floor(s*10))]++; valHist[Math.min(9,Math.floor(v*10))]++; segCounts[Math.min(11,Math.floor(hDeg/30))]++; } const n=Math.ceil(sp.length/3)||1; const mH=sumH/n,mS=sumS/n,mV=sumV/n; const stdH=Math.sqrt(Math.max(0,sumH2/n-mH*mH)); const stdS=Math.sqrt(Math.max(0,sumS2/n-mS*mS)); const stdV=Math.sqrt(Math.max(0,sumV2/n-mV*mV)); const segTotal=segCounts.reduce((a,b)=>a+b,0)||1; const hueSegments={}; HUE_SEG_NAMES.forEach((nm,i)=>hueSegments[nm]=segCounts[i]/segTotal); let warm=0,cool=0,neutral=0; swatches.forEach(sw=>{ const hd=sw.hsv[0]; if(hd<=60||hd>=330)warm+=sw.ratio; else if(hd>=180&&hd<=270)cool+=sw.ratio; else neutral+=sw.ratio; }); const ratios=swatches.map(s=>s.ratio).filter(v=>v>0); let richness=0; if(ratios.length>=2){ const ent=-ratios.reduce((s,v)=>s+v*Math.log2(v+1e-12),0); richness=ent/Math.log2(ratios.length); } self.postMessage({ id, result:{ dominant_colors:swatches, mean_hue:+mH.toFixed(2),mean_saturation:+mS.toFixed(4),mean_value:+mV.toFixed(4), std_hue:+stdH.toFixed(2),std_saturation:+stdS.toFixed(4),std_value:+stdV.toFixed(4), hue_hist:normalize(hueHist),sat_hist:normalize(satHist),val_hist:normalize(valHist), warm_ratio:+warm.toFixed(4),cool_ratio:+cool.toFixed(4),neutral_ratio:+neutral.toFixed(4), hue_segments:hueSegments, color_richness:+richness.toFixed(4), color_complexity:+mS.toFixed(4), filtered_ratio:+filteredRatio.toFixed(4), filtered_px:filtered.length, total_px:sampled.length, } }); };
+`;
+
+      class WorkerPool {
+        constructor(size, code) {
+          const blob = new Blob([code], { type: "application/javascript" });
+          const url = URL.createObjectURL(blob);
+          this._workers = Array.from({ length: size }, () => new Worker(url));
+          this._idle = Array.from({ length: size }, (_, i) => i);
+          this._queue = [];
+          this._cbs = new Map();
+          this._active = new Set();
+          this._workers.forEach((w, i) => {
+            w.onmessage = ({ data: { id, result } }) => {
+              const cb = this._cbs.get(id);
+              if (cb) {
+                cb(result);
+                this._cbs.delete(id);
+              }
+              this._active.delete(i);
+              this._idle.push(i);
+              this._tick();
+              updateWorkerDots(this._active);
+            };
+          });
+          URL.revokeObjectURL(url);
+        }
+        _tick() {
+          while (this._queue.length && this._idle.length) {
+            const { task, transfers, resolve } = this._queue.shift();
+            const wi = this._idle.shift();
+            this._active.add(wi);
+            this._cbs.set(task.id, resolve);
+            this._workers[wi].postMessage(task, transfers || []);
+            updateWorkerDots(this._active);
+          }
+        }
+        run(task, transfers) {
+          return new Promise((resolve) => {
+            this._queue.push({ task, transfers, resolve });
+            this._tick();
+          });
+        }
+      }
+
+      const state = {
+        files: [],
+        results: [],
+        params: { nColors: 8, resize: 300 },
+        filterParams: {
+          archEnabled: true,
+          skyEnabled: true,
+          vegEnabled: true,
+          spatialFilter: true,
+          shadowThreshold: 0.12,
+          skyS: 0.5,
+          vegH: 145,
+          vegS: 0.6,
+        },
+        charts: {},
+        filteredItems: [],
+        galleryPage: 0,
+        galleryObserver: null,
+        workerPool: null,
+      };
+      const PAGE_SIZE = 60;
+      const HUE_SEG_NAMES = [
+        "红",
+        "橙",
+        "黄",
+        "黄绿",
+        "绿",
+        "青绿",
+        "青",
+        "天蓝",
+        "蓝",
+        "蓝紫",
+        "紫",
+        "品红",
+      ];
+      const HUE_SEG_COLORS = [
+        "#C03818",
+        "#D46A2A",
+        "#D4A017",
+        "#8A9A4A",
+        "#4A7A54",
+        "#3A8A7A",
+        "#2A8A9A",
+        "#4A9ABA",
+        "#3A5A8A",
+        "#6A4A8A",
+        "#8A4A8A",
+        "#A32B5A",
+      ];
+      const ARCH_CHIP_DATA = [
+        { n: "朱砂红", c: "#C0392B" },
+        { n: "朱膘", c: "#E67E22" },
+        { n: "赭石", c: "#8B6340" },
+        { n: "雌黄", c: "#D4AC0D" },
+        { n: "琉璃黄", c: "#F1C40F" },
+        { n: "石绿", c: "#1A8C5B" },
+        { n: "石青", c: "#1F618D" },
+        { n: "宝蓝", c: "#2E4482" },
+      ];
+
+      (function init() {
+        state.workerPool = new WorkerPool(4, WORKER_CODE);
+        const leg = document.getElementById("anchorLegend");
+        ARCH_CHIP_DATA.forEach(({ n, c }) => {
+          const chip = document.createElement("div");
+          chip.className = "anchor-chip";
+          chip.textContent = n;
+          chip.style.color = c;
+          chip.style.borderColor = c;
+          leg.appendChild(chip);
+        });
+        document
+          .getElementById("togArchColors")
+          .addEventListener("change", (e) => {
+            state.filterParams.archEnabled = e.target.checked;
+          });
+        document.getElementById("togSky").addEventListener("change", (e) => {
+          state.filterParams.skyEnabled = e.target.checked;
+        });
+        document.getElementById("togVeg").addEventListener("change", (e) => {
+          state.filterParams.vegEnabled = e.target.checked;
+        });
+        document
+          .getElementById("togSpatial")
+          .addEventListener("change", (e) => {
+            state.filterParams.spatialFilter = e.target.checked;
+          });
+      })();
+      function updateWorkerDots(activeSet) {
+        for (let i = 0; i < 4; i++)
+          document
+            .getElementById(`wd${i}`)
+            .classList.toggle("active", activeSet.has(i));
+        document.getElementById("workerStatusText").textContent =
+          activeSet.size > 0 ? `${activeSet.size} 运作中` : "待机";
+      }
+
+      const dropZone = document.getElementById("dropZone"),
+        fileInput = document.getElementById("fileInput");
+      dropZone.addEventListener("click", () => fileInput.click());
+      dropZone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropZone.classList.add("drag-over");
+      });
+      dropZone.addEventListener("dragleave", () =>
+        dropZone.classList.remove("drag-over"),
+      );
+      dropZone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropZone.classList.remove("drag-over");
+        addFiles([...e.dataTransfer.files]);
+      });
+      fileInput.addEventListener("change", () =>
+        addFiles([...fileInput.files]),
+      );
+
+      function addFiles(files) {
+        const imgs = files.filter((f) => f.type.startsWith("image/"));
+        imgs.forEach((f) => {
+          if (
+            !state.files.find(
+              (x) => x.name === f.name && x.file.size === f.size,
+            )
+          )
+            state.files.push({
+              file: f,
+              url: URL.createObjectURL(f),
+              name: f.name,
+            });
+        });
+        renderFileList();
+        showToast(`已纳 ${imgs.length} 卷图`);
+      }
+      function renderFileList() {
+        document.getElementById("fileCount").textContent = state.files.length;
+        const list = document.getElementById("fileList");
+        list.innerHTML = state.files
+          .slice(-20)
+          .map(
+            (f, i) =>
+              `<div class="file-item"><img class="file-thumb" src="${f.url}"><span class="file-name">${f.name}</span><span style="color:var(--muted)">${(f.file.size / 1024).toFixed(0)}K</span><button class="remove-btn" onclick="removeFile(${state.files.length - 20 + i})">×</button></div>`,
+          )
+          .join("");
+        if (state.files.length > 0 && state.results.length === 0)
+          showPreviewCards();
+      }
+      function removeFile(i) {
+        URL.revokeObjectURL(state.files[i].url);
+        state.files.splice(i, 1);
+        renderFileList();
+        if (state.files.length === 0) resetGallery();
+      }
+      function clearAll() {
+        state.files.forEach((f) => URL.revokeObjectURL(f.url));
+        state.files = [];
+        state.results = [];
+        renderFileList();
+        resetGallery();
+      }
+      function resetGallery() {
+        document.getElementById("cardsGrid").innerHTML = "";
+        document.getElementById("galleryBadge").textContent = "0";
+        document.getElementById("summaryBadge").textContent = "0";
+        document.getElementById("emptyGallery").style.display = "flex";
+        document.getElementById("galleryContent").style.display = "none";
+      }
+      function showPreviewCards() {
+        if (state.results.length > 0) return;
+        document.getElementById("emptyGallery").style.display = "none";
+        document.getElementById("galleryContent").style.display = "block";
+        const grid = document.getElementById("cardsGrid");
+        grid.innerHTML = state.files
+          .map(
+            (f, i) =>
+              `<div class="img-card"><div class="card-preview"><img src="${f.url}" loading="lazy"><div class="card-preview-label">待勘</div></div><div class="card-body"><div class="card-name">${f.name}</div><div style="font-family:var(--mono);font-size:10px;color:var(--muted)">${(f.file.size / 1024).toFixed(0)} KB</div></div></div>`,
+          )
+          .join("");
+        document.getElementById("galleryBadge").textContent =
+          state.files.length;
+        document.getElementById("cardCount").textContent =
+          `${state.files.length} 张`;
+      }
+
+      function adjustParam(key, delta) {
+        if (key === "nColors") {
+          const cur = state.params.nColors;
+          let step = delta;
+          if (Math.abs(delta) === 1) {
+            if (cur >= 128) step = delta * 32;
+            else if (cur >= 64) step = delta * 16;
+            else if (cur >= 16) step = delta * 4;
+          }
+          state.params.nColors = Math.max(
+            2,
+            Math.min(256, state.params.nColors + step),
+          );
+          document.getElementById("nColorsVal").value = state.params.nColors;
+          document.getElementById("kWarning").style.display =
+            state.params.nColors > 64 ? "block" : "none";
+        } else if (key === "resize") {
+          state.params.resize = Math.max(
+            100,
+            Math.min(800, state.params.resize + delta),
+          );
+          document.getElementById("resizeVal").textContent =
+            state.params.resize + "px";
+        }
+      }
+      function syncKInput(el) {
+        const v = parseInt(el.value, 10);
+        if (!isNaN(v)) {
+          state.params.nColors = Math.max(2, Math.min(256, v));
+          document.getElementById("kWarning").style.display =
+            state.params.nColors > 64 ? "block" : "none";
+        }
+      }
+      function clampKInput(el) {
+        const v = parseInt(el.value, 10);
+        state.params.nColors = isNaN(v) ? 8 : Math.max(2, Math.min(256, v));
+        el.value = state.params.nColors;
+        document.getElementById("kWarning").style.display =
+          state.params.nColors > 64 ? "block" : "none";
+      }
+      function adjustFilter(key, delta) {
+        const fp = state.filterParams;
+        if (key === "shadow") {
+          fp.shadowThreshold = +Math.max(
+            0.0,
+            Math.min(1.0, fp.shadowThreshold + delta),
+          ).toFixed(2);
+          document.getElementById("shadowVal").textContent =
+            fp.shadowThreshold.toFixed(2);
+        } else if (key === "skyS") {
+          fp.skyS = +Math.max(0.0, Math.min(1.0, fp.skyS + delta)).toFixed(2);
+          document.getElementById("skySVal").textContent = fp.skyS.toFixed(2);
+        } else if (key === "vegH") {
+          fp.vegH = Math.max(0, Math.min(360, fp.vegH + delta));
+          document.getElementById("vegHVal").textContent = fp.vegH + "°";
+        }
+      }
+
+      const _quickActive = { shadow: false, sky: false, veg: false };
+      const QUICK_DEFAULTS = { shadowThreshold: 0.12, skyS: 0.5, vegH: 145 };
+      const QUICK_AGGRESSIVE = { shadowThreshold: 0.55, skyS: 1.0, vegH: 200 };
+      function quickFilter(mode) {
+        const fp = state.filterParams;
+        if (mode === "reset") {
+          fp.shadowThreshold = QUICK_DEFAULTS.shadowThreshold;
+          fp.skyS = QUICK_DEFAULTS.skyS;
+          fp.vegH = QUICK_DEFAULTS.vegH;
+          fp.skyEnabled = true;
+          fp.vegEnabled = true;
+          document.getElementById("togSky").checked = true;
+          document.getElementById("togVeg").checked = true;
+          _quickActive.shadow = false;
+          _quickActive.sky = false;
+          _quickActive.veg = false;
+          syncFilterUI();
+          updateQuickBtnStates();
+          showToast("滤法已重置");
+          return;
+        }
+        if (mode === "all") {
+          const allOn =
+            _quickActive.shadow && _quickActive.sky && _quickActive.veg;
+          if (allOn) {
+            quickFilter("reset");
+            return;
+          }
+          _quickActive.shadow = true;
+          _quickActive.sky = true;
+          _quickActive.veg = true;
+          fp.shadowThreshold = QUICK_AGGRESSIVE.shadowThreshold;
+          fp.skyS = QUICK_AGGRESSIVE.skyS;
+          fp.vegH = QUICK_AGGRESSIVE.vegH;
+          fp.skyEnabled = true;
+          fp.vegEnabled = true;
+          document.getElementById("togSky").checked = true;
+          document.getElementById("togVeg").checked = true;
+          syncFilterUI();
+          updateQuickBtnStates();
+          showToast("全滤已启");
+          return;
+        }
+        if (mode === "shadow") {
+          _quickActive.shadow = !_quickActive.shadow;
+          fp.shadowThreshold = _quickActive.shadow
+            ? QUICK_AGGRESSIVE.shadowThreshold
+            : QUICK_DEFAULTS.shadowThreshold;
+          document.getElementById("shadowVal").textContent =
+            fp.shadowThreshold.toFixed(2);
+        } else if (mode === "sky") {
+          _quickActive.sky = !_quickActive.sky;
+          fp.skyEnabled = _quickActive.sky;
+          fp.skyS = _quickActive.sky
+            ? QUICK_AGGRESSIVE.skyS
+            : QUICK_DEFAULTS.skyS;
+          document.getElementById("togSky").checked = fp.skyEnabled;
+          document.getElementById("skySVal").textContent = fp.skyS.toFixed(2);
+        } else if (mode === "veg") {
+          _quickActive.veg = !_quickActive.veg;
+          fp.vegEnabled = _quickActive.veg;
+          fp.vegH = _quickActive.veg
+            ? QUICK_AGGRESSIVE.vegH
+            : QUICK_DEFAULTS.vegH;
+          document.getElementById("togVeg").checked = fp.vegEnabled;
+          document.getElementById("vegHVal").textContent = fp.vegH + "°";
+        }
+        updateQuickBtnStates();
+      }
+      function syncFilterUI() {
+        document.getElementById("shadowVal").textContent =
+          state.filterParams.shadowThreshold.toFixed(2);
+        document.getElementById("skySVal").textContent =
+          state.filterParams.skyS.toFixed(2);
+        document.getElementById("vegHVal").textContent =
+          state.filterParams.vegH + "°";
+      }
+      function updateQuickBtnStates() {
+        document
+          .getElementById("qBtnShadow")
+          .classList.toggle("active", _quickActive.shadow);
+        document
+          .getElementById("qBtnSky")
+          .classList.toggle("active", _quickActive.sky);
+        document
+          .getElementById("qBtnVeg")
+          .classList.toggle("active", _quickActive.veg);
+        document
+          .getElementById("qBtnAll")
+          .classList.toggle(
+            "active",
+            _quickActive.shadow && _quickActive.sky && _quickActive.veg,
+          );
+      }
+
+      let _taskCounter = 0;
+      function analyzeImageCanvas(fileEntry) {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = async () => {
+            let w = img.width,
+              h = img.height;
+            const scale = state.params.resize / Math.max(w, h);
+            if (scale < 1) {
+              w = Math.round(w * scale);
+              h = Math.round(h * scale);
+            }
+            const cv = document.createElement("canvas");
+            cv.width = w;
+            cv.height = h;
+            cv.getContext("2d").drawImage(img, 0, 0, w, h);
+            const imgData = cv.getContext("2d").getImageData(0, 0, w, h);
+            const taskId = `t_${++_taskCounter}`;
+            const result = await state.workerPool.run(
+              {
+                id: taskId,
+                pixelData: imgData.data,
+                width: w,
+                height: h,
+                nColors: state.params.nColors,
+                fp: { ...state.filterParams },
+              },
+              [imgData.data.buffer],
+            );
+            resolve({
+              filename: fileEntry.name,
+              url: fileEntry.url,
+              width: w,
+              height: h,
+              error: "",
+              ...result,
+            });
+          };
+          img.onerror = () =>
+            resolve({ filename: fileEntry.name, error: "读取失败" });
+          img.src = fileEntry.url;
+        });
+      }
+
+      async function startAnalysis() {
+        if (!state.files.length) {
+          showToast("请先载图", "err");
+          return;
+        }
+        state.results = [];
+        const runBtn = document.getElementById("runBtn");
+        runBtn.disabled = true;
+        runBtn.textContent = "解析中…";
+        document.getElementById("statusText").textContent = "解析中";
+        ["exportCsvBtn", "exportJsonBtn", "exportHtmlBtn"].forEach(
+          (id) => (document.getElementById(id).disabled = true),
+        );
+        document.getElementById("progressIdle").style.display = "none";
+        document.getElementById("progressRunning").style.display = "flex";
+        switchTab("progress");
+        document.getElementById("progressLog").innerHTML = "";
+        addLog(`▶ 始勘 ${state.files.length} 卷图`, "info");
+        const total = state.files.length;
+        const realtime = document.getElementById("toggleRealtime").checked;
+        let done = 0;
+        const queue = [...state.files];
+        async function processNext() {
+          if (!queue.length) return;
+          const f = queue.shift();
+          try {
+            const result = await analyzeImageCanvas(f);
+            state.results.push(result);
+            done++;
+            const pct = Math.round((done / total) * 100);
+            document.getElementById("progressPct").textContent = pct + "%";
+            document.getElementById("progressFrac").textContent =
+              `${done} / ${total}`;
+            addLog(`✓ [${done}/${total}] ${f.name}`, "ok");
+            if (realtime && done % 10 === 0) renderResultCards();
+          } catch (err) {
+            state.results.push({
+              filename: f.name,
+              error: err.message || "错误",
+            });
+            addLog(`✗ ${f.name}: ${err.message}`, "err");
+            done++;
+            document.getElementById("progressPct").textContent =
+              Math.round((done / total) * 100) + "%";
+          }
+          if (queue.length) await processNext();
+        }
+        await Promise.all(
+          Array.from({ length: Math.min(4, total) }, processNext),
+        );
+        const ok = state.results.filter((r) => !r.error).length;
+        addLog(`\n✔ 毕！成 ${ok} / 败 ${total - ok}`, "done");
+        runBtn.disabled = false;
+        runBtn.textContent = "重 勘";
+        document.getElementById("statusText").textContent = `毕勘 ${total} 卷`;
+        ["exportCsvBtn", "exportJsonBtn", "exportHtmlBtn"].forEach(
+          (id) => (document.getElementById(id).disabled = false),
+        );
+        renderResultCards();
+        renderSummaryCharts();
+        switchTab("gallery");
+        showToast(`勘毕！`);
+      }
+      function addLog(msg, type = "info") {
+        const log = document.getElementById("progressLog");
+        const d = document.createElement("div");
+        d.className = `log-line log-${type}`;
+        d.textContent = msg;
+        log.appendChild(d);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function renderResultCards(filterStr, sortKey) {
+        filterStr = filterStr ?? document.getElementById("searchInput").value;
+        sortKey =
+          sortKey ??
+          (document.querySelector(".sort-btn.active")?.dataset.sort || "name");
+        const valid = state.results.filter((r) => !r.error);
+        let items = valid.filter((r) =>
+          r.filename.toLowerCase().includes(filterStr.toLowerCase()),
+        );
+        if (sortKey === "warm")
+          items.sort((a, b) => b.warm_ratio - a.warm_ratio);
+        else if (sortKey === "rich")
+          items.sort((a, b) => b.color_richness - a.color_richness);
+        else if (sortKey === "bright")
+          items.sort((a, b) => b.mean_value - a.mean_value);
+        else if (sortKey === "filt")
+          items.sort(
+            (a, b) => (b.filtered_ratio || 0) - (a.filtered_ratio || 0),
+          );
+        else items.sort((a, b) => a.filename.localeCompare(b.filename));
+        state.filteredItems = items;
+        state.galleryPage = 0;
+        document.getElementById("galleryBadge").textContent = items.length;
+        document.getElementById("cardCount").textContent = `${items.length} 张`;
+        document.getElementById("cardsGrid").innerHTML = "";
+        document.getElementById("emptyGallery").style.display = "none";
+        document.getElementById("galleryContent").style.display = "block";
+        appendGalleryPage();
+        if (state.galleryObserver) state.galleryObserver.disconnect();
+        state.galleryObserver = new IntersectionObserver(
+          (entries) => {
+            if (entries[0].isIntersecting) appendGalleryPage();
+          },
+          { root: document.getElementById("galleryContent"), threshold: 0.1 },
+        );
+        state.galleryObserver.observe(
+          document.getElementById("gallerySentinel"),
+        );
+      }
+      function appendGalleryPage() {
+        const items = state.filteredItems;
+        const start = state.galleryPage * PAGE_SIZE,
+          end = Math.min(start + PAGE_SIZE, items.length);
+        if (start >= items.length) return;
+        const fileMap = {};
+        state.files.forEach((f) => (fileMap[f.name] = f.url));
+        const grid = document.getElementById("cardsGrid");
+        for (let idx = start; idx < end; idx++) {
+          const r = items[idx];
+          const topColors = (r.dominant_colors || []).slice(0, 8);
+          const swatchBar = topColors
+            .map(
+              (sw) =>
+                `<div class="swatch-seg" style="background:${sw.hex};flex:${sw.rel_ratio}"></div>`,
+            )
+            .join("");
+          const topSegs = HUE_SEG_NAMES.map((n, i) => ({
+            n,
+            val: r.hue_segments[n] || 0,
+            c: HUE_SEG_COLORS[i],
+          }))
+            .sort((a, b) => b.val - a.val)
+            .slice(0, 4);
+          const segMini = topSegs
+            .map(
+              (s) =>
+                `<div class="hsm-row"><span class="hsm-name">${s.n}</span><div class="hsm-bar"><div class="hsm-fill" style="width:${(s.val * 100).toFixed(1)}%;background:${s.c}"></div></div><span class="hsm-val">${(s.val * 100).toFixed(1)}%</span></div>`,
+            )
+            .join("");
+          const el = document.createElement("div");
+          el.innerHTML = `<div class="img-card" onclick="openDetail(${state.results.indexOf(r)})"><div class="card-preview">${fileMap[r.filename] ? `<img src="${fileMap[r.filename]}" loading="lazy">` : ""}<div class="card-preview-label">${r.width}×${r.height}px</div></div><div class="card-body"><div class="card-name">${r.filename}</div><div class="swatch-bar">${swatchBar}</div><div class="wc-badges"><span class="badge" style="color:#C03818;border-color:#C03818">暖 ${(r.warm_ratio * 100).toFixed(0)}%</span><span class="badge" style="color:#3A5A8A;border-color:#3A5A8A">冷 ${(r.cool_ratio * 100).toFixed(0)}%</span>${r.filtered_ratio != null ? `<span class="badge" style="color:#6b635e;border-color:#dcd4c7">滤 ${(r.filtered_ratio * 100).toFixed(0)}%</span>` : ""}</div><div class="hue-seg-mini">${segMini}</div><div class="card-metrics"><span class="metric-chip">丰度 ${r.color_richness.toFixed(2)}</span><span class="metric-chip">明度 ${r.mean_value.toFixed(2)}</span></div></div></div>`;
+          grid.appendChild(el.firstElementChild);
+        }
+        state.galleryPage++;
+        document.getElementById("loadMoreIndicator").style.display =
+          end < items.length ? "block" : "none";
+      }
+      function filterCards() {
+        renderResultCards();
+      }
+      function sortCards(key, btn) {
+        document
+          .querySelectorAll(".sort-btn")
+          .forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        btn.dataset.sort = key;
+        filterCards();
+      }
+
+      function openDetail(idx) {
+        const r = state.results[idx];
+        if (!r || r.error) return;
+        document.getElementById("modalFname").textContent = r.filename;
+        document.getElementById("modalMeta").textContent =
+          `H均${r.mean_hue.toFixed(1)}° · S均${(r.mean_saturation * 100).toFixed(1)}% · V均${(r.mean_value * 100).toFixed(1)}%` +
+          (r.filtered_ratio != null
+            ? ` · 滤${(r.filtered_ratio * 100).toFixed(0)}%`
+            : "");
+        const swatchList = r.dominant_colors
+          .map(
+            (sw) =>
+              `<div class="swatch-item"><div class="swatch-block" style="background:${sw.hex}"></div><div class="swatch-info"><div class="swatch-hex">${sw.hex}</div><div class="swatch-nums">H${sw.hsv[0]}° S${(sw.hsv[1] * 100).toFixed(0)}% V${(sw.hsv[2] * 100).toFixed(0)}%</div></div><div class="swatch-ratios"><div class="ratio-main">${(sw.ratio * 100).toFixed(1)}%</div></div></div>`,
+          )
+          .join("");
+        const hueFull = HUE_SEG_NAMES.map((n, i) => {
+          const val = r.hue_segments[n] || 0;
+          return `<div class="hue-full-row"><span style="width:24px">${n}</span><div class="hue-full-bar"><div class="hue-full-fill" style="width:${(val * 100).toFixed(1)}%;background:${HUE_SEG_COLORS[i]}"></div></div><span style="font-family:var(--mono);width:36px;text-align:right">${(val * 100).toFixed(1)}%</span></div>`;
+        }).join("");
+        document.getElementById("modalBody").innerHTML =
+          `<div class="modal-section"><div class="modal-section-title">主色色阶</div><div class="swatch-list">${swatchList}</div><div style="margin-top:20px"><div class="modal-section-title">综合量化</div><div class="stats-grid">${[
+            ["色彩丰度", r.color_richness.toFixed(3)],
+            ["色彩复杂度", r.color_complexity.toFixed(3)],
+            ["暖色比", (r.warm_ratio * 100).toFixed(1) + "%"],
+            ["冷色比", (r.cool_ratio * 100).toFixed(1) + "%"],
+          ]
+            .map(
+              ([n, v]) =>
+                `<div class="stat-box"><div class="stat-name">${n}</div><div class="stat-val">${v}</div></div>`,
+            )
+            .join(
+              "",
+            )}</div></div></div><div class="modal-section"><div class="modal-section-title">十二色相</div><div class="hue-seg-full">${hueFull}</div></div>`;
+        document.getElementById("detailModal").classList.add("show");
+      }
+      function closeModal(e) {
+        if (e.target === document.getElementById("detailModal"))
+          document.getElementById("detailModal").classList.remove("show");
+      }
+      function closeModalBtn() {
+        document.getElementById("detailModal").classList.remove("show");
+      }
+
+      function renderSummaryCharts() {
+        const valid = state.results.filter((r) => !r.error);
+        if (!valid.length) return;
+        document.getElementById("emptySummary").style.display = "none";
+        document.getElementById("summaryContent").style.display = "grid";
+        document.getElementById("summaryBadge").textContent = valid.length;
+        Object.values(state.charts).forEach((c) => c.destroy());
+        state.charts = {};
+        const CD = {
+          plugins: {
+            legend: {
+              labels: { color: "#6b635e", font: { family: "'Noto Serif SC'" } },
+            },
+          },
+          scales: {
+            x: { ticks: { color: "#6b635e" }, grid: { color: "#dcd4c7" } },
+            y: { ticks: { color: "#6b635e" }, grid: { color: "#dcd4c7" } },
+          },
+        };
+        const wc = [...valid].sort((a, b) => a.warm_ratio - b.warm_ratio);
+        state.charts.warmCool = new Chart(
+          document.getElementById("chartWarmCool"),
+          {
+            type: "bar",
+            data: {
+              labels: wc.map((r) =>
+                r.filename.replace(/\.[^.]+$/, "").slice(0, 8),
+              ),
+              datasets: [
+                {
+                  label: "暖色",
+                  data: wc.map((r) => +(r.warm_ratio * 100).toFixed(1)),
+                  backgroundColor: "rgba(192,56,24,0.7)",
+                  stack: "s",
+                },
+                {
+                  label: "冷色",
+                  data: wc.map((r) => +(r.cool_ratio * 100).toFixed(1)),
+                  backgroundColor: "rgba(58,90,138,0.7)",
+                  stack: "s",
+                },
+                {
+                  label: "中性",
+                  data: wc.map((r) => +(r.neutral_ratio * 100).toFixed(1)),
+                  backgroundColor: "rgba(107,99,94,0.7)",
+                  stack: "s",
+                },
+              ],
+            },
+            options: { ...CD, responsive: true, maintainAspectRatio: false },
+          },
+        );
+        state.charts.scatter = new Chart(
+          document.getElementById("chartScatter"),
+          {
+            type: "scatter",
+            data: {
+              datasets: [
+                {
+                  label: "图片",
+                  data: valid.map((r) => ({
+                    x: +r.mean_saturation.toFixed(3),
+                    y: +r.mean_value.toFixed(3),
+                    r,
+                  })),
+                  backgroundColor: valid.map(
+                    (r) => `hsla(${r.mean_hue.toFixed(0)},60%,40%,0.75)`,
+                  ),
+                  pointRadius: 4,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                ...CD.plugins,
+                tooltip: {
+                  callbacks: { label: (ctx) => `${ctx.raw.r.filename}` },
+                },
+              },
+              scales: {
+                x: {
+                  ...CD.scales.x,
+                  title: { display: true, text: "饱和度", color: "#6b635e" },
+                },
+                y: {
+                  ...CD.scales.y,
+                  title: { display: true, text: "明度", color: "#6b635e" },
+                },
+              },
+            },
+          },
+        );
+        const segMeans = HUE_SEG_NAMES.map(
+          (n) =>
+            (valid.reduce((s, r) => s + (r.hue_segments[n] || 0), 0) /
+              valid.length) *
+            100,
+        );
+        state.charts.hueSeg = new Chart(
+          document.getElementById("chartHueSeg"),
+          {
+            type: "bar",
+            data: {
+              labels: HUE_SEG_NAMES,
+              datasets: [
+                {
+                  label: "平均占比(%)",
+                  data: segMeans.map((v) => +v.toFixed(2)),
+                  backgroundColor: HUE_SEG_COLORS.map((c) => c + "DD"),
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { ...CD.plugins, legend: { display: false } },
+              scales: { ...CD.scales },
+            },
+          },
+        );
+        const richBins = new Array(10).fill(0);
+        valid.forEach(
+          (r) => richBins[Math.min(9, Math.floor(r.color_richness * 10))]++,
+        );
+        state.charts.richness = new Chart(
+          document.getElementById("chartRichness"),
+          {
+            type: "bar",
+            data: {
+              labels: [
+                "0-.1",
+                ".1-.2",
+                ".2-.3",
+                ".3-.4",
+                ".4-.5",
+                ".5-.6",
+                ".6-.7",
+                ".7-.8",
+                ".8-.9",
+                ".9-1",
+              ],
+              datasets: [
+                { label: "图片数", data: richBins, backgroundColor: "#a32b21" },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { ...CD.plugins, legend: { display: false } },
+              scales: { ...CD.scales },
+            },
+          },
+        );
+        const hueBins = new Array(12).fill(0);
+        valid.forEach(
+          (r) => hueBins[Math.min(11, Math.floor(r.mean_hue / 30))]++,
+        );
+        state.charts.hueDist = new Chart(
+          document.getElementById("chartHueDist"),
+          {
+            type: "bar",
+            data: {
+              labels: HUE_SEG_NAMES,
+              datasets: [
+                {
+                  label: "图片数",
+                  data: hueBins,
+                  backgroundColor: HUE_SEG_COLORS,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { ...CD.plugins, legend: { display: false } },
+              scales: { ...CD.scales },
+            },
+          },
+        );
+        const heatmap = document.getElementById("chartHeatmap");
+        const N = valid.length;
+        const cellW = Math.max(4, Math.floor(800 / N));
+        heatmap.width = N * cellW + 64;
+        heatmap.height = 12 * 18 + 30;
+        const ctx = heatmap.getContext("2d");
+        ctx.fillStyle = "#f9f7f1";
+        ctx.fillRect(0, 0, heatmap.width, heatmap.height);
+        let maxV = 0;
+        valid.forEach((r) =>
+          HUE_SEG_NAMES.forEach(
+            (n) => (maxV = Math.max(maxV, r.hue_segments[n] || 0)),
+          ),
+        );
+        valid.forEach((r, xi) => {
+          HUE_SEG_NAMES.forEach((n, yi) => {
+            const v = r.hue_segments[n] || 0;
+            ctx.globalAlpha = 0.1 + (maxV > 0 ? v / maxV : 0) * 0.9;
+            ctx.fillStyle = HUE_SEG_COLORS[yi];
+            ctx.fillRect(64 + xi * cellW, yi * 18, cellW - 1, 17);
+          });
+        });
+        ctx.globalAlpha = 1;
+        ctx.font = "10px Noto Serif SC";
+        ctx.fillStyle = "#6b635e";
+        HUE_SEG_NAMES.forEach((n, yi) => {
+          ctx.fillText(n, 12, yi * 18 + 12);
+        });
+      }
+
+      function exportCSV() {
+        const valid = state.results.filter((r) => !r.error);
+        if (!valid.length) return;
+        const csv =
+          "\uFEFF" +
+          [
+            "filename",
+            "mean_hue",
+            "mean_saturation",
+            "mean_value",
+            "color_richness",
+          ].join(",") +
+          "\n" +
+          valid
+            .map((r) =>
+              [
+                r.filename,
+                r.mean_hue,
+                r.mean_saturation,
+                r.mean_value,
+                r.color_richness,
+              ].join(","),
+            )
+            .join("\n");
+        downloadBlob(csv, "color.csv", "text/csv");
+        showToast("CSV已出");
+      }
+      function exportJSON() {
+        const valid = state.results.filter((r) => !r.error);
+        if (!valid.length) return;
+        
+        // 转换为定析仪所需的格式
+        const plotData = convertToPlotDataFormat(valid);
+        
+        downloadBlob(
+          JSON.stringify(plotData, null, 2),
+          "plot_data.json",
+          "application/json",
+        );
+        showToast("JSON已出（定析仪格式）");
+      }
+      
+      // 转换为定析仪格式
+      function convertToPlotDataFormat(results) {
+        const images = results.map(r => {
+          return {
+            filename: r.filename,
+            width: r.width,
+            height: r.height,
+            dominant_colors: r.dominant_colors.map(c => ({
+              hex: c.hex,
+              rgb: c.rgb,
+              hsv: c.hsv,
+              ratio: c.ratio
+            })),
+            warm_cool: {
+              warm: r.warm_ratio,
+              cool: r.cool_ratio,
+              neutral: r.neutral_ratio
+            },
+            metrics: {
+              color_richness: r.color_richness,
+              color_complexity: r.color_complexity,
+              mean_hue: r.mean_hue,
+              mean_saturation: r.mean_saturation,
+              mean_value: r.mean_value
+            },
+            hue_segments: r.hue_segments
+          };
+        });
+
+        // 计算聚合数据
+        const aggregate = {
+          warm_ratio_mean: images.reduce((s, i) => s + i.warm_cool.warm, 0) / images.length,
+          cool_ratio_mean: images.reduce((s, i) => s + i.warm_cool.cool, 0) / images.length,
+          hue_segments_mean: {}
+        };
+
+        // 计算色相段平均值
+        HUE_SEG_NAMES.forEach(name => {
+          aggregate.hue_segments_mean[name] = 
+            images.reduce((s, i) => s + (i.hue_segments[name] || 0), 0) / images.length;
+        });
+
+        return {
+          meta: {
+            hue_segment_names: HUE_SEG_NAMES,
+            hue_segment_colors: HUE_SEG_COLORS
+          },
+          images: images,
+          aggregate: aggregate
+        };
+      }
+      function exportHTMLReport() {
+        const valid = state.results.filter((r) => !r.error);
+        if (!valid.length) return;
+        const cards = valid
+          .map((r) => {
+            const sw = r.dominant_colors
+              .map(
+                (s) =>
+                  `<div style="flex:${s.rel_ratio};background:${s.hex};min-width:3px;height:100%"></div>`,
+              )
+              .join("");
+            return `<div style="border:1px solid #dcd4c7;padding:14px;background:#fff;break-inside:avoid;margin-bottom:10px"><div style="font-size:12px;color:#2c2825;margin-bottom:8px">${r.filename}</div><div style="display:flex;height:20px;border:1px solid #e8e2d8;margin-bottom:8px">${sw}</div><div style="font-size:10px;color:#6b635e">H均:${r.mean_hue}° S均:${(r.mean_saturation * 100).toFixed(0)}%</div></div>`;
+          })
+          .join("");
+        const html = `<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>建筑色彩分析汇览</title><style>body{background:#f9f7f1;color:#2c2825;font-family:'Noto Serif SC',serif;padding:24px} h1{text-align:center;font-size:24px;border-bottom:1px solid #a32b21;padding-bottom:10px;margin-bottom:20px;color:#a32b21}</style></head><body><h1>🏛 建筑色彩考证汇览</h1><div>${cards}</div></body></html>`;
+        downloadBlob(html, "report.html", "text/html");
+        showToast("卷册已出");
+      }
+      function downloadBlob(content, filename, type) {
+        const b = new Blob([content], { type });
+        const url = URL.createObjectURL(b);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      function downloadPyScript() {
+        downloadBlob(
+          "# Python 离线分析脚本说明\n",
+          "script_note.txt",
+          "text/plain",
+        );
+        showToast("脚本说明已载");
+      }
+      function switchTab(name) {
+        ["gallery", "summary", "progress"].forEach((t, i) => {
+          document
+            .querySelectorAll(".tab")
+            [i].classList.toggle("active", t === name);
+          document
+            .querySelectorAll(".tab-content")
+            [i].classList.toggle("active", t === name);
+        });
+      }
+      let _t;
+      function showToast(msg, type = "ok") {
+        const t = document.getElementById("toast");
+        t.textContent = msg;
+        t.className = `toast ${type === "err" ? "err" : ""} show`;
+        clearTimeout(_t);
+        _t = setTimeout(() => t.classList.remove("show"), 3000);
+      }
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape")
+          document.getElementById("detailModal").classList.remove("show");
+      });
+    </script>
+  </body>
+</html>
